@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Heart, Shield, Clock, Ambulance, Stethoscope, CalendarCheck, Activity, ArrowRight, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import ThemeToggle from '@/components/ThemeToggle';
 import heroImage from '@/assets/hero-hospital.jpg';
 
 const features = [
@@ -32,9 +33,10 @@ const LandingPage = () => {
             </div>
             <span className="font-display font-bold text-lg text-foreground">SmartHospital</span>
           </Link>
-          <div className="hidden md:flex items-center gap-8">
+          <div className="hidden md:flex items-center gap-6">
             <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Features</a>
             <a href="#stats" className="text-sm text-muted-foreground hover:text-foreground transition-colors">About</a>
+            <ThemeToggle />
             <Link to="/login">
               <Button variant="ghost" size="sm">Log in</Button>
             </Link>
