@@ -86,9 +86,12 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
             </div>
             <span className="font-display font-bold text-sm text-foreground">SmartHospital</span>
           </Link>
-          <Button variant="ghost" size="sm" onClick={handleLogout}>
-            <LogOut className="w-4 h-4" />
-          </Button>
+          <div className="flex items-center gap-1">
+            <ThemeToggle />
+            <Button variant="ghost" size="sm" onClick={handleLogout}>
+              <LogOut className="w-4 h-4" />
+            </Button>
+          </div>
         </header>
 
         {/* Mobile bottom nav */}

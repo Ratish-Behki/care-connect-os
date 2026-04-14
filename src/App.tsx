@@ -12,6 +12,8 @@ import AppointmentsPage from "./pages/AppointmentsPage";
 import RecordsPage from "./pages/RecordsPage";
 import EmergencyPage from "./pages/EmergencyPage";
 import ProfilePage from "./pages/ProfilePage";
+import AnalyticsPage from "./pages/AnalyticsPage";
+import SymptomTriagePage from "./pages/SymptomTriagePage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -32,6 +34,8 @@ const App = () => (
           <Route path="/records" element={<RecordsPage />} />
           <Route path="/emergency" element={<EmergencyPage />} />
           <Route path="/profile" element={<ProfilePage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/symptom-triage" element={<SymptomTriagePage />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
