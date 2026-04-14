@@ -1,13 +1,17 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Heart, LayoutDashboard, Search, Calendar, FileText, AlertTriangle, User, LogOut } from 'lucide-react';
+import { Heart, LayoutDashboard, Search, Calendar, FileText, AlertTriangle, User, LogOut, BarChart3, Brain } from 'lucide-react';
 import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
+import ThemeToggle from '@/components/ThemeToggle';
+import SkipToContent from '@/components/SkipToContent';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
   { icon: Search, label: 'Find Doctors', path: '/doctors' },
   { icon: Calendar, label: 'Appointments', path: '/appointments' },
   { icon: FileText, label: 'Records', path: '/records' },
+  { icon: Brain, label: 'Symptom Check', path: '/symptom-triage' },
+  { icon: BarChart3, label: 'Analytics', path: '/analytics' },
   { icon: AlertTriangle, label: 'Emergency', path: '/emergency' },
   { icon: User, label: 'Profile', path: '/profile' },
 ];
@@ -24,6 +28,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <div className="min-h-screen bg-background flex">
+      <SkipToContent />
       {/* Sidebar */}
       <aside className="hidden md:flex flex-col w-64 border-r border-border bg-card p-4">
         <Link to="/" className="flex items-center gap-2 px-3 mb-8">
@@ -63,9 +68,12 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
               <p className="text-xs text-muted-foreground capitalize">{user?.role}</p>
             </div>
           </div>
-          <Button variant="ghost" size="sm" className="w-full justify-start text-muted-foreground" onClick={handleLogout}>
-            <LogOut className="w-4 h-4 mr-2" /> Sign Out
-          </Button>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Button variant="ghost" size="sm" className="flex-1 justify-start text-muted-foreground" onClick={handleLogout}>
+              <LogOut className="w-4 h-4 mr-2" /> Sign Out
+            </Button>
+          </div>
         </div>
       </aside>
 
@@ -84,7 +92,7 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
         </header>
 
         {/* Mobile bottom nav */}
-        <main className="flex-1 overflow-auto p-6">
+        <main id="main-content" className="flex-1 overflow-auto p-6" role="main">
           {children}
         </main>
 
