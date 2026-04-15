@@ -1,25 +1,95 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Heart, LayoutDashboard, Search, Calendar, FileText, AlertTriangle, User, LogOut, BarChart3, Brain } from 'lucide-react';
+import { type ComponentType } from 'react';
+import { Bell, Heart, LayoutDashboard, Search, Calendar, FileText, AlertTriangle, User, LogOut, BarChart3, Brain, Stethoscope, Ambulance, ShieldCheck, CheckCheck } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/authStore';
 import { Button } from '@/components/ui/button';
 import ThemeToggle from '@/components/ThemeToggle';
 import SkipToContent from '@/components/SkipToContent';
+import { api } from '@/lib/api';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { UserRole } from '@/types';
 
-const navItems = [
-  { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-  { icon: Search, label: 'Find Doctors', path: '/doctors' },
-  { icon: Calendar, label: 'Appointments', path: '/appointments' },
-  { icon: FileText, label: 'Records', path: '/records' },
-  { icon: Brain, label: 'Symptom Check', path: '/symptom-triage' },
-  { icon: BarChart3, label: 'Analytics', path: '/analytics' },
-  { icon: AlertTriangle, label: 'Emergency', path: '/emergency' },
-  { icon: User, label: 'Profile', path: '/profile' },
-];
+const navByRole: Record<UserRole, Array<{ icon: ComponentType<{ className?: string }>; label: string; path: string }>> = {
+  patient: [
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+    { icon: Search, label: 'Find Doctors', path: '/doctors' },
+    { icon: Calendar, label: 'Appointments', path: '/appointments' },
+    { icon: FileText, label: 'Records', path: '/records' },
+    { icon: Bell, label: 'Notifications', path: '/notifications' },
+    { icon: Brain, label: 'Symptom Check', path: '/symptom-triage' },
+    { icon: AlertTriangle, label: 'Emergency', path: '/emergency' },
+    { icon: User, label: 'Profile', path: '/profile' },
+  ],
+  doctor: [
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+    { icon: Calendar, label: 'Appointments', path: '/appointments' },
+    { icon: FileText, label: 'Records', path: '/records' },
+    { icon: Bell, label: 'Notifications', path: '/notifications' },
+    { icon: BarChart3, label: 'Analytics', path: '/analytics' },
+    { icon: Stethoscope, label: 'Doctor View', path: '/doctors' },
+    { icon: User, label: 'Profile', path: '/profile' },
+  ],
+  ambulance: [
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+    { icon: Ambulance, label: 'Emergency', path: '/emergency' },
+    { icon: Bell, label: 'Notifications', path: '/notifications' },
+    { icon: User, label: 'Profile', path: '/profile' },
+  ],
+  hospital: [
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+    { icon: Ambulance, label: 'Emergency Handoff', path: '/emergency' },
+    { icon: Bell, label: 'Notifications', path: '/notifications' },
+    { icon: BarChart3, label: 'Operations', path: '/analytics' },
+    { icon: FileText, label: 'Records', path: '/records' },
+    { icon: User, label: 'Profile', path: '/profile' },
+  ],
+  admin: [
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+    { icon: BarChart3, label: 'Analytics', path: '/analytics' },
+    { icon: Search, label: 'Doctors', path: '/doctors' },
+    { icon: Calendar, label: 'Appointments', path: '/appointments' },
+    { icon: Bell, label: 'Notifications', path: '/notifications' },
+    { icon: ShieldCheck, label: 'System', path: '/profile' },
+  ],
+};
 
 const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
+  const role = user?.role ?? 'patient';
+  const navItems = navByRole[role];
+  const { data: notificationPayload } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: api.getNotifications,
+  });
+  const notifications = notificationPayload?.notifications ?? [];
+  const unreadCount = notificationPayload?.unreadCount ?? 0;
+
+  const markOne = useMutation({
+    mutationFn: api.markNotificationRead,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+
+  const markAll = useMutation({
+    mutationFn: api.markAllNotificationsRead,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    },
+  });
+
+  const previewNotifications = notifications.slice(0, 4);
 
   const handleLogout = () => {
     logout();
@@ -87,6 +157,44 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => {
             <span className="font-display font-bold text-sm text-foreground">SmartHospital</span>
           </Link>
           <div className="flex items-center gap-1">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="relative">
+                  <Bell className="w-4 h-4" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -right-1 -top-1 h-4 min-w-4 rounded-full bg-emergency px-1 text-[10px] font-semibold text-primary-foreground">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80">
+                <DropdownMenuLabel className="flex items-center justify-between">
+                  <span>Notifications</span>
+                  <button className="text-xs text-primary" onClick={() => markAll.mutate()} type="button">
+                    Mark all read
+                  </button>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {previewNotifications.length === 0 ? (
+                  <DropdownMenuItem disabled>No notifications yet</DropdownMenuItem>
+                ) : (
+                  previewNotifications.map((notification) => (
+                    <DropdownMenuItem key={notification.id} className="flex flex-col items-start gap-1 py-2" onSelect={() => markOne.mutate(notification.id)}>
+                      <div className="flex w-full items-center justify-between gap-2">
+                        <span className="text-sm font-medium text-foreground">{notification.title}</span>
+                        {!notification.read && <span className="h-2 w-2 rounded-full bg-primary" />}
+                      </div>
+                      <span className="text-xs text-muted-foreground line-clamp-2">{notification.description}</span>
+                    </DropdownMenuItem>
+                  ))
+                )}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link to="/notifications">View all notifications</Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <ThemeToggle />
             <Button variant="ghost" size="sm" onClick={handleLogout}>
               <LogOut className="w-4 h-4" />

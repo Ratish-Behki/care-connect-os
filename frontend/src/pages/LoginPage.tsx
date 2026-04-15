@@ -5,11 +5,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion } from 'framer-motion';
 import { Heart, Mail, Lock, ArrowRight } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuthStore } from '@/store/authStore';
 import { UserRole } from '@/types';
+import { api } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email'),
@@ -22,21 +25,37 @@ const roles: { value: UserRole; label: string; emoji: string }[] = [
   { value: 'patient', label: 'Patient', emoji: '🏥' },
   { value: 'doctor', label: 'Doctor', emoji: '🩺' },
   { value: 'ambulance', label: 'Ambulance', emoji: '🚑' },
+  { value: 'hospital', label: 'Hospital', emoji: '🏨' },
   { value: 'admin', label: 'Admin', emoji: '⚙️' },
 ];
 
 const LoginPage = () => {
   const [selectedRole, setSelectedRole] = useState<UserRole>('patient');
   const navigate = useNavigate();
-  const login = useAuthStore((s) => s.login);
+  const setUser = useAuthStore((s) => s.setUser);
+  const { toast } = useToast();
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   });
 
+  const loginMutation = useMutation({
+    mutationFn: (data: LoginForm) => api.login({ ...data, role: selectedRole }),
+    onSuccess: ({ user }) => {
+      setUser(user);
+      navigate('/dashboard');
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Login failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
   const onSubmit = (data: LoginForm) => {
-    login(data.email, data.password, selectedRole);
-    navigate('/dashboard');
+    loginMutation.mutate(data);
   };
 
   return (
@@ -59,7 +78,7 @@ const LoginPage = () => {
 
         <div className="glass-card p-8">
           {/* Role selector */}
-          <div className="grid grid-cols-4 gap-2 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-6">
             {roles.map((r) => (
               <button
                 key={r.value}
@@ -94,7 +113,7 @@ const LoginPage = () => {
               {errors.password && <p className="text-xs text-destructive mt-1">{errors.password.message}</p>}
             </div>
             <Button type="submit" className="w-full gradient-primary text-primary-foreground border-0">
-              Sign In <ArrowRight className="ml-2 w-4 h-4" />
+              {loginMutation.isPending ? 'Signing In...' : <>Sign In <ArrowRight className="ml-2 w-4 h-4" /></>}
             </Button>
           </form>
 

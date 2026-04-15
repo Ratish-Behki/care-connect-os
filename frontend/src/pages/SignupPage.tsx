@@ -5,11 +5,14 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion } from 'framer-motion';
 import { Heart, Mail, Lock, User, ArrowRight } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuthStore } from '@/store/authStore';
 import { UserRole } from '@/types';
+import { api } from '@/lib/api';
+import { useToast } from '@/hooks/use-toast';
 
 const signupSchema = z.object({
   name: z.string().min(2, 'Min 2 characters').max(100),
@@ -27,21 +30,37 @@ const roles: { value: UserRole; label: string; emoji: string }[] = [
   { value: 'patient', label: 'Patient', emoji: '🏥' },
   { value: 'doctor', label: 'Doctor', emoji: '🩺' },
   { value: 'ambulance', label: 'Ambulance', emoji: '🚑' },
+  { value: 'hospital', label: 'Hospital', emoji: '🏨' },
   { value: 'admin', label: 'Admin', emoji: '⚙️' },
 ];
 
 const SignupPage = () => {
   const [selectedRole, setSelectedRole] = useState<UserRole>('patient');
   const navigate = useNavigate();
-  const signup = useAuthStore((s) => s.signup);
+  const setUser = useAuthStore((s) => s.setUser);
+  const { toast } = useToast();
 
   const { register, handleSubmit, formState: { errors } } = useForm<SignupForm>({
     resolver: zodResolver(signupSchema),
   });
 
+  const signupMutation = useMutation({
+    mutationFn: (data: SignupForm) => api.signup({ ...data, role: selectedRole }),
+    onSuccess: ({ user }) => {
+      setUser(user);
+      navigate('/dashboard');
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Signup failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+
   const onSubmit = (data: SignupForm) => {
-    signup(data.name, data.email, data.password, selectedRole);
-    navigate('/dashboard');
+    signupMutation.mutate(data);
   };
 
   return (
@@ -63,7 +82,7 @@ const SignupPage = () => {
         </div>
 
         <div className="glass-card p-8">
-          <div className="grid grid-cols-4 gap-2 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-6">
             {roles.map((r) => (
               <button
                 key={r.value}
@@ -114,7 +133,7 @@ const SignupPage = () => {
               {errors.confirmPassword && <p className="text-xs text-destructive mt-1">{errors.confirmPassword.message}</p>}
             </div>
             <Button type="submit" className="w-full gradient-primary text-primary-foreground border-0">
-              Create Account <ArrowRight className="ml-2 w-4 h-4" />
+              {signupMutation.isPending ? 'Creating Account...' : <>Create Account <ArrowRight className="ml-2 w-4 h-4" /></>}
             </Button>
           </form>
 

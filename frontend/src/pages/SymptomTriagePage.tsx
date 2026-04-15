@@ -1,52 +1,14 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Activity, AlertTriangle, CheckCircle, Brain, ArrowRight, Loader2 } from 'lucide-react';
+import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import DashboardLayout from '@/components/DashboardLayout';
 import { useToast } from '@/hooks/use-toast';
-
-interface TriageResult {
-  severity: 'low' | 'medium' | 'high';
-  confidence: number;
-  recommendedDepartment: string;
-  possibleConditions: string[];
-  actions: string[];
-}
-
-// Mock AI triage logic — replace with real AI via Lovable Cloud later
-const mockTriage = (symptoms: string): TriageResult => {
-  const lower = symptoms.toLowerCase();
-
-  if (lower.includes('chest pain') || lower.includes('breathing') || lower.includes('unconscious') || lower.includes('severe bleeding')) {
-    return {
-      severity: 'high',
-      confidence: 92,
-      recommendedDepartment: 'Emergency / Cardiology',
-      possibleConditions: ['Cardiac Event', 'Pulmonary Embolism', 'Acute Respiratory Distress'],
-      actions: ['Call ambulance immediately', 'Alert emergency department', 'Prioritize in queue'],
-    };
-  }
-
-  if (lower.includes('fever') || lower.includes('headache') || lower.includes('vomiting') || lower.includes('pain')) {
-    return {
-      severity: 'medium',
-      confidence: 78,
-      recommendedDepartment: 'General Medicine',
-      possibleConditions: ['Viral Infection', 'Migraine', 'Gastroenteritis'],
-      actions: ['Schedule priority appointment', 'Monitor vitals', 'Recommend hydration'],
-    };
-  }
-
-  return {
-    severity: 'low',
-    confidence: 85,
-    recommendedDepartment: 'General Medicine',
-    possibleConditions: ['Common Cold', 'Minor Allergy', 'Fatigue'],
-    actions: ['Schedule regular appointment', 'Recommend OTC medication', 'Follow up in 48 hours'],
-  };
-};
+import { api } from '@/lib/api';
+import type { SymptomTriageResult } from '@/types';
 
 const severityConfig = {
   low: { color: 'bg-success/10 text-success border-success/30', icon: CheckCircle, label: 'Low Priority', bg: 'bg-success' },
@@ -57,8 +19,31 @@ const severityConfig = {
 const SymptomTriagePage = () => {
   const [symptoms, setSymptoms] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [result, setResult] = useState<TriageResult | null>(null);
+  const [result, setResult] = useState<SymptomTriageResult | null>(null);
   const { toast } = useToast();
+
+  const analyzeMutation = useMutation({
+    mutationFn: api.analyzeSymptoms,
+    onSuccess: ({ result: triageResult }) => {
+      setResult(triageResult);
+      setIsAnalyzing(false);
+
+      if (triageResult.severity === 'high') {
+        toast({
+          title: 'High Emergency Detected',
+          description: 'Ambulance has been prioritized. Emergency department alerted.',
+        });
+      }
+    },
+    onError: (error: Error) => {
+      setIsAnalyzing(false);
+      toast({
+        title: 'Analysis failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
 
   const handleAnalyze = () => {
     if (!symptoms.trim()) {
@@ -68,20 +53,7 @@ const SymptomTriagePage = () => {
 
     setIsAnalyzing(true);
     setResult(null);
-
-    // Simulate AI processing delay
-    setTimeout(() => {
-      const triageResult = mockTriage(symptoms);
-      setResult(triageResult);
-      setIsAnalyzing(false);
-
-      if (triageResult.severity === 'high') {
-        toast({
-          title: '🚨 High Emergency Detected',
-          description: 'Ambulance has been prioritized. Emergency department alerted.',
-        });
-      }
-    }, 2000);
+    analyzeMutation.mutate(symptoms);
   };
 
   const config = result ? severityConfig[result.severity] : null;
@@ -103,7 +75,7 @@ const SymptomTriagePage = () => {
             <h2 className="font-display font-semibold text-foreground">Describe Your Symptoms</h2>
           </div>
           <Textarea
-            placeholder="e.g., I've been having chest pain since morning with difficulty breathing..."
+            placeholder="e.g., I've had fever, cough, and body aches for two days, or my stomach hurts after eating..."
             value={symptoms}
             onChange={(e) => setSymptoms(e.target.value)}
             className="min-h-[120px] resize-none"
@@ -111,7 +83,13 @@ const SymptomTriagePage = () => {
           />
           <div className="flex flex-wrap gap-2">
             <p className="text-xs text-muted-foreground mr-2">Quick examples:</p>
-            {['Chest pain and shortness of breath', 'High fever with headache', 'Mild cough and runny nose'].map((ex) => (
+            {[
+              'Fever, cough, and body aches',
+              'Stomach pain with vomiting and diarrhea',
+              'Burning when urinating',
+              'Headache with nausea and light sensitivity',
+              'Rash with itching after eating something',
+            ].map((ex) => (
               <button
                 key={ex}
                 onClick={() => setSymptoms(ex)}
@@ -123,10 +101,10 @@ const SymptomTriagePage = () => {
           </div>
           <Button
             onClick={handleAnalyze}
-            disabled={isAnalyzing || !symptoms.trim()}
+            disabled={isAnalyzing || analyzeMutation.isPending || !symptoms.trim()}
             className="w-full gradient-primary text-primary-foreground border-0"
           >
-            {isAnalyzing ? (
+            {isAnalyzing || analyzeMutation.isPending ? (
               <>
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" /> Analyzing Symptoms...
               </>
@@ -156,6 +134,7 @@ const SymptomTriagePage = () => {
                   <div className="flex-1">
                     <h3 className="font-display text-xl font-bold text-foreground">{config.label}</h3>
                     <p className="text-sm text-muted-foreground">Confidence: {result.confidence}%</p>
+                    <p className="text-sm text-muted-foreground mt-1">{result.summary}</p>
                   </div>
                   <div className={`w-16 h-16 rounded-full border-4 ${result.severity === 'high' ? 'border-emergency' : result.severity === 'medium' ? 'border-warning' : 'border-success'} flex items-center justify-center`}>
                     <span className="font-display font-bold text-lg text-foreground">{result.confidence}%</span>
@@ -168,11 +147,16 @@ const SymptomTriagePage = () => {
                 {/* Recommended Department */}
                 <div className="glass-card p-5">
                   <h4 className="font-display font-semibold text-foreground mb-3 flex items-center gap-2">
-                    <ArrowRight className="w-4 h-4 text-primary" /> Recommended Department
+                    <ArrowRight className="w-4 h-4 text-primary" /> Care Setting
                   </h4>
-                  <Badge variant="secondary" className="text-sm px-3 py-1.5">
-                    {result.recommendedDepartment}
-                  </Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="secondary" className="text-sm px-3 py-1.5 capitalize">
+                      {result.careSetting.replace('-', ' ')}
+                    </Badge>
+                    <Badge variant="outline" className="text-sm px-3 py-1.5">
+                      {result.recommendedDepartment}
+                    </Badge>
+                  </div>
                 </div>
 
                 {/* Possible Conditions */}
@@ -189,24 +173,57 @@ const SymptomTriagePage = () => {
                 </div>
               </div>
 
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="glass-card p-5">
+                  <h4 className="font-display font-semibold text-foreground mb-3">Immediate Actions</h4>
+                  <div className="space-y-2">
+                    {result.actions.map((action, i) => (
+                      <div key={action} className="flex items-start gap-3 text-sm">
+                        <span className="w-6 h-6 rounded-full bg-accent text-accent-foreground flex items-center justify-center text-xs font-bold shrink-0">
+                          {i + 1}
+                        </span>
+                        <span className="text-foreground">{action}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="glass-card p-5">
+                  <h4 className="font-display font-semibold text-foreground mb-3">Home Care</h4>
+                  <div className="space-y-1.5">
+                    {result.homeCare.map((item) => (
+                      <div key={item} className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <div className="w-1.5 h-1.5 rounded-full bg-primary" />
+                        {item}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               {/* Recommended Actions */}
               <div className="glass-card p-5">
-                <h4 className="font-display font-semibold text-foreground mb-3">Recommended Actions</h4>
+                <h4 className="font-display font-semibold text-foreground mb-3">Urgent Warning Signs</h4>
                 <div className="space-y-2">
-                  {result.actions.map((action, i) => (
-                    <div key={action} className="flex items-start gap-3 text-sm">
-                      <span className="w-6 h-6 rounded-full bg-accent text-accent-foreground flex items-center justify-center text-xs font-bold shrink-0">
-                        {i + 1}
+                  {result.redFlags.map((flag) => (
+                    <div key={flag} className="flex items-start gap-3 text-sm">
+                      <span className="w-6 h-6 rounded-full bg-emergency/10 text-emergency flex items-center justify-center text-xs font-bold shrink-0">
+                        !
                       </span>
-                      <span className="text-foreground">{action}</span>
+                      <span className="text-foreground">{flag}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
+              <div className="glass-card p-5">
+                <h4 className="font-display font-semibold text-foreground mb-3">Follow-up Guidance</h4>
+                <p className="text-sm text-muted-foreground">{result.followUp}</p>
+              </div>
+
               {/* Disclaimer */}
               <p className="text-xs text-muted-foreground text-center">
-                ⚠️ This is an AI-assisted prediction. Always consult a qualified healthcare professional for accurate diagnosis.
+                ⚠️ This is triage guidance, not a diagnosis. If symptoms are severe, unusual, or getting worse, seek medical care.
               </p>
             </motion.div>
           )}

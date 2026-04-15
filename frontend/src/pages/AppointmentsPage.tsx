@@ -1,17 +1,34 @@
 import { motion } from 'framer-motion';
 import { Calendar, Clock, X, Video, Building } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import DashboardLayout from '@/components/DashboardLayout';
-import { mockAppointments } from '@/data/mockData';
 import { useToast } from '@/hooks/use-toast';
+import { api } from '@/lib/api';
 
 const AppointmentsPage = () => {
   const { toast } = useToast();
-  const upcoming = mockAppointments.filter((a) => a.status === 'upcoming');
-  const past = mockAppointments.filter((a) => a.status !== 'upcoming');
+  const queryClient = useQueryClient();
+  const { data: appointments = [], isLoading } = useQuery({
+    queryKey: ['appointments'],
+    queryFn: api.getAppointments,
+  });
+  const upcoming = appointments.filter((a) => a.status === 'upcoming');
+  const past = appointments.filter((a) => a.status !== 'upcoming');
+
+  const cancelMutation = useMutation({
+    mutationFn: api.cancelAppointment,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      toast({ title: 'Appointment cancelled', description: 'Your appointment has been cancelled.' });
+    },
+    onError: (error: Error) => {
+      toast({ title: 'Cancellation failed', description: error.message, variant: 'destructive' });
+    },
+  });
 
   const handleCancel = (id: string) => {
-    toast({ title: 'Appointment cancelled', description: 'Your appointment has been cancelled.' });
+    cancelMutation.mutate(id);
   };
 
   return (
@@ -25,7 +42,9 @@ const AppointmentsPage = () => {
         {/* Upcoming */}
         <div>
           <h2 className="font-display text-lg font-semibold text-foreground mb-4">Upcoming</h2>
-          {upcoming.length === 0 ? (
+          {isLoading ? (
+            <div className="glass-card p-8 text-center text-sm text-muted-foreground">Loading appointments...</div>
+          ) : upcoming.length === 0 ? (
             <div className="glass-card p-8 text-center">
               <Calendar className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
               <p className="text-sm text-muted-foreground">No upcoming appointments</p>
@@ -58,8 +77,8 @@ const AppointmentsPage = () => {
                         </div>
                       </div>
                     </div>
-                    <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleCancel(appt.id)}>
-                      <X className="w-4 h-4 mr-1" /> Cancel
+                    <Button variant="ghost" size="sm" className="text-destructive" onClick={() => handleCancel(appt.id)} disabled={cancelMutation.isPending}>
+                      <X className="w-4 h-4 mr-1" /> {cancelMutation.isPending ? 'Cancelling...' : 'Cancel'}
                     </Button>
                   </div>
                 </motion.div>

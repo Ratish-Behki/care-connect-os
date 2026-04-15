@@ -33,10 +33,18 @@ npm run install:all
 ## Run Frontend
 
 ```bash
+cd frontend
+# Windows (PowerShell)
+Copy-Item .env.example .env
+
+# macOS/Linux
+# cp .env.example .env
+
+cd ..
 npm run dev:frontend
 ```
 
-Frontend runs on `http://localhost:5173` by default.
+Frontend runs on `http://localhost:8080` by default.
 
 ## Run Backend
 
@@ -61,4 +69,7 @@ Health check endpoint:
 ## Notes
 
 - Configure CORS origin in `backend/.env` with `FRONTEND_ORIGIN`.
+- If you change the frontend port, update `FRONTEND_ORIGIN` to match.
+- Configure `VITE_API_URL` in `frontend/.env` if backend runs on a different URL.
+- Configure `VITE_GOOGLE_MAPS_JS_API_KEY` in `frontend/.env` to enable live Google Maps emergency tracking.
 - Run frontend and backend in separate terminals.

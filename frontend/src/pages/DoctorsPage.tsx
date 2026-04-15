@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Search, Star, Clock, Filter } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import DashboardLayout from '@/components/DashboardLayout';
-import { mockDoctors } from '@/data/mockData';
 import BookingModal from '@/components/BookingModal';
 import { Doctor } from '@/types';
+import { api } from '@/lib/api';
 
 const specializations = ['All', 'Cardiology', 'Neurology', 'Orthopedics', 'Dermatology', 'Pediatrics', 'General Medicine'];
 
@@ -14,8 +15,12 @@ const DoctorsPage = () => {
   const [search, setSearch] = useState('');
   const [selectedSpec, setSelectedSpec] = useState('All');
   const [bookingDoctor, setBookingDoctor] = useState<Doctor | null>(null);
+  const { data: doctors = [], isLoading } = useQuery({
+    queryKey: ['doctors'],
+    queryFn: api.getDoctors,
+  });
 
-  const filtered = mockDoctors.filter((d) => {
+  const filtered = doctors.filter((d) => {
     const matchesSearch = d.name.toLowerCase().includes(search.toLowerCase()) || d.specialization.toLowerCase().includes(search.toLowerCase());
     const matchesSpec = selectedSpec === 'All' || d.specialization === selectedSpec;
     return matchesSearch && matchesSpec;
@@ -60,7 +65,10 @@ const DoctorsPage = () => {
         </div>
 
         {/* Doctor Cards */}
-        <div className="grid md:grid-cols-2 gap-4">
+        {isLoading ? (
+          <div className="glass-card p-8 text-center text-sm text-muted-foreground">Loading doctors...</div>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-4">
           {filtered.map((doctor, i) => (
             <motion.div
               key={doctor.id}
@@ -111,7 +119,8 @@ const DoctorsPage = () => {
               </div>
             </motion.div>
           ))}
-        </div>
+          </div>
+        )}
 
         {filtered.length === 0 && (
           <div className="glass-card p-12 text-center">

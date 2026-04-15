@@ -3,6 +3,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import RequireAuth from "@/components/RequireAuth";
 import LandingPage from "./pages/LandingPage";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
@@ -11,6 +12,7 @@ import DoctorsPage from "./pages/DoctorsPage";
 import AppointmentsPage from "./pages/AppointmentsPage";
 import RecordsPage from "./pages/RecordsPage";
 import EmergencyPage from "./pages/EmergencyPage";
+import NotificationsPage from "./pages/NotificationsPage";
 import ProfilePage from "./pages/ProfilePage";
 import AnalyticsPage from "./pages/AnalyticsPage";
 import SymptomTriagePage from "./pages/SymptomTriagePage";
@@ -28,14 +30,78 @@ const App = () => (
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
-          <Route path="/dashboard" element={<PatientDashboard />} />
-          <Route path="/doctors" element={<DoctorsPage />} />
-          <Route path="/appointments" element={<AppointmentsPage />} />
-          <Route path="/records" element={<RecordsPage />} />
-          <Route path="/emergency" element={<EmergencyPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
-          <Route path="/symptom-triage" element={<SymptomTriagePage />} />
+          <Route
+            path="/dashboard"
+            element={
+              <RequireAuth>
+                <PatientDashboard />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/doctors"
+            element={
+              <RequireAuth>
+                <DoctorsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/appointments"
+            element={
+              <RequireAuth>
+                <AppointmentsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/records"
+            element={
+              <RequireAuth>
+                <RecordsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/emergency"
+            element={
+              <RequireAuth>
+                <EmergencyPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/profile"
+            element={
+              <RequireAuth>
+                <ProfilePage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/notifications"
+            element={
+              <RequireAuth>
+                <NotificationsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/analytics"
+            element={
+              <RequireAuth>
+                <AnalyticsPage />
+              </RequireAuth>
+            }
+          />
+          <Route
+            path="/symptom-triage"
+            element={
+              <RequireAuth>
+                <SymptomTriagePage />
+              </RequireAuth>
+            }
+          />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

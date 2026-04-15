@@ -1,9 +1,15 @@
 import { motion } from 'framer-motion';
 import { FileText, Activity, Pill } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import DashboardLayout from '@/components/DashboardLayout';
-import { mockRecords } from '@/data/mockData';
+import { api } from '@/lib/api';
 
 const RecordsPage = () => {
+  const { data: records = [], isLoading } = useQuery({
+    queryKey: ['records'],
+    queryFn: api.getRecords,
+  });
+
   return (
     <DashboardLayout>
       <div className="max-w-4xl mx-auto space-y-6">
@@ -12,8 +18,11 @@ const RecordsPage = () => {
           <p className="text-sm text-muted-foreground mt-1">Your complete health history</p>
         </div>
 
-        <div className="space-y-4">
-          {mockRecords.map((record, i) => (
+        {isLoading ? (
+          <div className="glass-card p-8 text-center text-sm text-muted-foreground">Loading records...</div>
+        ) : (
+          <div className="space-y-4">
+          {records.map((record, i) => (
             <motion.div
               key={record.id}
               initial={{ opacity: 0, y: 10 }}
@@ -46,7 +55,8 @@ const RecordsPage = () => {
               </div>
             </motion.div>
           ))}
-        </div>
+          </div>
+        )}
       </div>
     </DashboardLayout>
   );

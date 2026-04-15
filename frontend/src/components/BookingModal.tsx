@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Calendar, Clock, Video, Building } from 'lucide-react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Doctor } from '@/types';
 import { useToast } from '@/hooks/use-toast';
+import { api } from '@/lib/api';
 
 const timeSlots = ['9:00 AM', '10:00 AM', '11:00 AM', '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'];
 const dates = Array.from({ length: 7 }, (_, i) => {
@@ -22,14 +24,37 @@ const BookingModal = ({ doctor, onClose }: BookingModalProps) => {
   const [selectedTime, setSelectedTime] = useState('');
   const [selectedType, setSelectedType] = useState<'in-person' | 'video'>('in-person');
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const bookAppointment = useMutation({
+    mutationFn: api.createAppointment,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['appointments'] });
+      toast({
+        title: 'Appointment Booked! ✅',
+        description: `${doctor.name} on ${selectedDate} at ${selectedTime}`,
+      });
+      onClose();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Booking failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
 
   const handleBook = () => {
     if (!selectedTime) return;
-    toast({
-      title: 'Appointment Booked! ✅',
-      description: `${doctor.name} on ${selectedDate} at ${selectedTime}`,
+    bookAppointment.mutate({
+      doctorId: doctor.id,
+      doctorName: doctor.name,
+      specialization: doctor.specialization,
+      date: selectedDate,
+      time: selectedTime,
+      type: selectedType,
     });
-    onClose();
   };
 
   return (
@@ -127,10 +152,10 @@ const BookingModal = ({ doctor, onClose }: BookingModalProps) => {
 
           <Button
             className="w-full gradient-primary text-primary-foreground border-0"
-            disabled={!selectedTime}
+            disabled={!selectedTime || bookAppointment.isPending}
             onClick={handleBook}
           >
-            Confirm Booking
+            {bookAppointment.isPending ? 'Booking...' : 'Confirm Booking'}
           </Button>
         </motion.div>
       </div>
