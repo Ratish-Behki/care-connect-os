@@ -1,14 +1,34 @@
 import type { Appointment, Doctor, EmergencyLocation, EmergencyRequest, EmergencyResourcePayload, MedicalRecord, NotificationItem, PatientProfile, SymptomTriageResult, User, UserRole } from '@/types';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5000').replace(/\/$/, '');
+const AUTH_STORAGE_KEY = 'care-connect-auth';
 
 type ApiResponse<T> = Promise<T>;
 
+function getAuthToken() {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!raw) {
+      return null;
+    }
+    const parsed = JSON.parse(raw);
+    return parsed?.state?.token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getAuthToken();
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(init?.headers ?? {}),
     },
   });
@@ -23,12 +43,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  login: (input: { email: string; password: string; role: UserRole }): ApiResponse<{ user: User }> =>
+  login: (input: { email: string; password: string; role: UserRole }): ApiResponse<{ user: User; token: string }> =>
     request('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  signup: (input: { name: string; email: string; password: string; role: UserRole }): ApiResponse<{ user: User }> =>
+  signup: (input: { name: string; email: string; password: string; role: UserRole }): ApiResponse<{ user: User; token: string }> =>
     request('/api/auth/signup', {
       method: 'POST',
       body: JSON.stringify(input),

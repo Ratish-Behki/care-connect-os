@@ -3,9 +3,11 @@ import { motion } from 'framer-motion';
 import { Calendar, FileText, AlertTriangle, Search, Clock, ArrowRight, Activity, Bell, Shield, Stethoscope, Ambulance } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAuthStore } from '@/store/authStore';
-import { api } from '@/lib/api';
+import { appointmentService } from '@/services/appointmentService';
+import { recordService } from '@/services/recordService';
+import { notificationService } from '@/services/notificationService';
 
 const dashboardModes = {
   patient: {
@@ -70,15 +72,15 @@ const PatientDashboard = () => {
   const role = user?.role ?? 'patient';
   const { data: appointments = [], isLoading: appointmentsLoading } = useQuery({
     queryKey: ['appointments'],
-    queryFn: api.getAppointments,
+    queryFn: appointmentService.getAppointments,
   });
   const { data: records = [], isLoading: recordsLoading } = useQuery({
     queryKey: ['records'],
-    queryFn: api.getRecords,
+    queryFn: recordService.getRecords,
   });
   const { data: notificationPayload } = useQuery({
     queryKey: ['notifications'],
-    queryFn: api.getNotifications,
+    queryFn: notificationService.getNotifications,
   });
   const upcomingAppointments = appointments.filter((a) => a.status === 'upcoming');
   const notifications = notificationPayload?.notifications ?? [];

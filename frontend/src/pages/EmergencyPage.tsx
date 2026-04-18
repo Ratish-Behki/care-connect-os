@@ -14,12 +14,12 @@ import {
   Radio,
   Wifi,
 } from 'lucide-react';
-import DashboardLayout from '@/components/DashboardLayout';
-import EmergencyLiveMap from '@/components/EmergencyLiveMap';
+import DashboardLayout from '@/components/layout/DashboardLayout';
+import EmergencyLiveMap from '@/components/maps/EmergencyLiveMap';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { api } from '@/lib/api';
-import { getEmergencySocket, disconnectEmergencySocket } from '@/lib/socket';
+import { emergencyService } from '@/services/emergencyService';
+import { emergencySocketService } from '@/services/socket/emergencySocket';
 import { useAuthStore } from '@/store/authStore';
 import { useToast } from '@/hooks/use-toast';
 import type { EmergencyHospital, EmergencyLocation, EmergencyRequest } from '@/types';
@@ -80,13 +80,13 @@ const EmergencyPage = () => {
 
   const { data: activeEmergencyPayload } = useQuery({
     queryKey: ['active-emergencies'],
-    queryFn: api.getActiveEmergencies,
+    queryFn: emergencyService.getActiveEmergencies,
     enabled: role !== 'patient',
   });
 
   const { data: emergencyResources } = useQuery({
     queryKey: ['emergency-resources'],
-    queryFn: api.getEmergencyResources,
+    queryFn: emergencyService.getEmergencyResources,
     refetchInterval: 5000,
   });
 
@@ -101,7 +101,7 @@ const EmergencyPage = () => {
   const availableDoctors = emergencyResources?.doctors.filter((entry) => entry.available).length ?? 0;
 
   const requestEmergency = useMutation({
-    mutationFn: api.requestEmergency,
+    mutationFn: emergencyService.requestEmergency,
     onSuccess: ({ emergency: createdEmergency, ambulance: createdAmbulance, etaMinutes: createdEtaMinutes }) => {
       setIsRequesting(false);
       setActiveEmergency(createdEmergency);
@@ -150,7 +150,7 @@ const EmergencyPage = () => {
   }, []);
 
   useEffect(() => {
-    const socket = getEmergencySocket();
+    const socket = emergencySocketService.getEmergencySocket();
 
     const handleSnapshot = ({ emergency: snapshot }: { emergency: EmergencyRequest }) => {
       setActiveEmergency(snapshot);
@@ -184,7 +184,7 @@ const EmergencyPage = () => {
       if (socket.connected) {
         socket.disconnect();
       }
-      disconnectEmergencySocket();
+      emergencySocketService.disconnectEmergencySocket();
     };
   }, [toast]);
 
@@ -193,7 +193,7 @@ const EmergencyPage = () => {
       return;
     }
 
-    const socket = getEmergencySocket();
+    const socket = emergencySocketService.getEmergencySocket();
     socket.emit('emergency:join', {
       emergencyId: emergency.id,
       role,
@@ -215,7 +215,7 @@ const EmergencyPage = () => {
     let cancelled = false;
 
     const emitLocation = (location: EmergencyLocation) => {
-      const socket = getEmergencySocket();
+      const socket = emergencySocketService.getEmergencySocket();
       setCurrentLocation(location);
 
       socket.emit(shareRole === 'patient' ? 'emergency:patient-location' : 'emergency:ambulance-location', {
@@ -322,14 +322,14 @@ const EmergencyPage = () => {
 
     setIsSharingLocation(false);
     setSocketStatus('Ambulance location sharing stopped.');
-    const socket = getEmergencySocket();
+    const socket = emergencySocketService.getEmergencySocket();
     socket.emit('emergency:complete', { emergencyId: emergency.id });
     setActiveEmergency((current) => (current ? { ...current, status: 'completed' } : current));
   };
 
   const handleCancelEmergency = () => {
     if (emergency?.id) {
-      const socket = getEmergencySocket();
+      const socket = emergencySocketService.getEmergencySocket();
       socket.emit('emergency:complete', { emergencyId: emergency.id });
     }
 
@@ -347,7 +347,7 @@ const EmergencyPage = () => {
       return;
     }
 
-    const socket = getEmergencySocket();
+    const socket = emergencySocketService.getEmergencySocket();
     socket.emit('emergency:hospital-ready', { emergencyId: emergency.id });
     toast({
       title: 'Hospital marked ready',

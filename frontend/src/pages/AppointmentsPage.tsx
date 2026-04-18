@@ -2,22 +2,22 @@ import { motion } from 'framer-motion';
 import { Calendar, Clock, X, Video, Building } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useToast } from '@/hooks/use-toast';
-import { api } from '@/lib/api';
+import { appointmentService } from '@/services/appointmentService';
 
 const AppointmentsPage = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const { data: appointments = [], isLoading } = useQuery({
     queryKey: ['appointments'],
-    queryFn: api.getAppointments,
+    queryFn: appointmentService.getAppointments,
   });
   const upcoming = appointments.filter((a) => a.status === 'upcoming');
   const past = appointments.filter((a) => a.status !== 'upcoming');
 
   const cancelMutation = useMutation({
-    mutationFn: api.cancelAppointment,
+    mutationFn: appointmentService.cancelAppointment,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['appointments'] });
       toast({ title: 'Appointment cancelled', description: 'Your appointment has been cancelled.' });

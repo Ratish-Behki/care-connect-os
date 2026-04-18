@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuthStore } from '@/store/authStore';
 import { UserRole } from '@/types';
-import { api } from '@/lib/api';
+import { authService } from '@/services/authService';
 import { useToast } from '@/hooks/use-toast';
 
 const signupSchema = z.object({
@@ -37,7 +37,7 @@ const roles: { value: UserRole; label: string; emoji: string }[] = [
 const SignupPage = () => {
   const [selectedRole, setSelectedRole] = useState<UserRole>('patient');
   const navigate = useNavigate();
-  const setUser = useAuthStore((s) => s.setUser);
+  const setSession = useAuthStore((s) => s.setSession);
   const { toast } = useToast();
 
   const { register, handleSubmit, formState: { errors } } = useForm<SignupForm>({
@@ -45,9 +45,9 @@ const SignupPage = () => {
   });
 
   const signupMutation = useMutation({
-    mutationFn: (data: SignupForm) => api.signup({ ...data, role: selectedRole }),
-    onSuccess: ({ user }) => {
-      setUser(user);
+    mutationFn: (data: SignupForm) => authService.signup({ ...data, role: selectedRole }),
+    onSuccess: ({ user, token }) => {
+      setSession(user, token);
       navigate('/dashboard');
     },
     onError: (error: Error) => {

@@ -4,10 +4,10 @@ import { Bell, CheckCheck, CircleAlert, Clock3, Inbox, Sparkles } from 'lucide-r
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import type { ComponentType } from 'react';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { api } from '@/lib/api';
+import { notificationService } from '@/services/notificationService';
 import { NotificationItem } from '@/types';
 
 const filters = [
@@ -31,19 +31,19 @@ const NotificationsPage = () => {
   const queryClient = useQueryClient();
   const { data } = useQuery({
     queryKey: ['notifications'],
-    queryFn: api.getNotifications,
+    queryFn: notificationService.getNotifications,
   });
 
   const notifications = data?.notifications ?? [];
   const unreadCount = data?.unreadCount ?? 0;
 
   const markAll = useMutation({
-    mutationFn: api.markAllNotificationsRead,
+    mutationFn: notificationService.markAllNotificationsRead,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
   });
 
   const markOne = useMutation({
-    mutationFn: api.markNotificationRead,
+    mutationFn: notificationService.markNotificationRead,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['notifications'] }),
   });
 

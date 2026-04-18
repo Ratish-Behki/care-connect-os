@@ -6,9 +6,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useAuthStore } from '@/store/authStore';
-import { api } from '@/lib/api';
+import { profileService } from '@/services/profileService';
 import { useToast } from '@/hooks/use-toast';
 
 const emptyForm = {
@@ -28,7 +28,7 @@ const ProfilePage = () => {
   const { toast } = useToast();
   const { data: profile, isLoading } = useQuery({
     queryKey: ['profile'],
-    queryFn: api.getProfile,
+    queryFn: profileService.getProfile,
   });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -51,7 +51,7 @@ const ProfilePage = () => {
   }, [profile, open]);
 
   const updateMutation = useMutation({
-    mutationFn: api.updateProfile,
+    mutationFn: profileService.updateProfile,
     onSuccess: ({ user }) => {
       setUser(user);
       queryClient.invalidateQueries({ queryKey: ['profile'] });

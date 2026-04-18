@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -11,7 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuthStore } from '@/store/authStore';
 import { UserRole } from '@/types';
-import { api } from '@/lib/api';
+import { authService } from '@/services/authService';
 import { useToast } from '@/hooks/use-toast';
 
 const loginSchema = z.object({
@@ -32,17 +32,25 @@ const roles: { value: UserRole; label: string; emoji: string }[] = [
 const LoginPage = () => {
   const [selectedRole, setSelectedRole] = useState<UserRole>('patient');
   const navigate = useNavigate();
-  const setUser = useAuthStore((s) => s.setUser);
+  const setSession = useAuthStore((s) => s.setSession);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const hasHydrated = useAuthStore((s) => s.hasHydrated);
   const { toast } = useToast();
+
+  useEffect(() => {
+    if (hasHydrated && isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [hasHydrated, isAuthenticated, navigate]);
 
   const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   });
 
   const loginMutation = useMutation({
-    mutationFn: (data: LoginForm) => api.login({ ...data, role: selectedRole }),
-    onSuccess: ({ user }) => {
-      setUser(user);
+    mutationFn: (data: LoginForm) => authService.login({ ...data, role: selectedRole }),
+    onSuccess: ({ user, token }) => {
+      setSession(user, token);
       navigate('/dashboard');
     },
     onError: (error: Error) => {

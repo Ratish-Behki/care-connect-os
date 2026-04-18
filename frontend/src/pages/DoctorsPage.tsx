@@ -4,10 +4,10 @@ import { Search, Star, Clock, Filter } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import DashboardLayout from '@/components/DashboardLayout';
-import BookingModal from '@/components/BookingModal';
+import DashboardLayout from '@/components/layout/DashboardLayout';
+import BookingModal from '@/components/modals/BookingModal';
 import { Doctor } from '@/types';
-import { api } from '@/lib/api';
+import { doctorService } from '@/services/doctorService';
 
 const specializations = ['All', 'Cardiology', 'Neurology', 'Orthopedics', 'Dermatology', 'Pediatrics', 'General Medicine'];
 
@@ -17,7 +17,7 @@ const DoctorsPage = () => {
   const [bookingDoctor, setBookingDoctor] = useState<Doctor | null>(null);
   const { data: doctors = [], isLoading } = useQuery({
     queryKey: ['doctors'],
-    queryFn: api.getDoctors,
+    queryFn: doctorService.getDoctors,
   });
 
   const filtered = doctors.filter((d) => {

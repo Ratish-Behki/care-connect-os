@@ -1,13 +1,13 @@
 import { motion } from 'framer-motion';
 import { FileText, Activity, Pill } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import DashboardLayout from '@/components/DashboardLayout';
-import { api } from '@/lib/api';
+import DashboardLayout from '@/components/layout/DashboardLayout';
+import { recordService } from '@/services/recordService';
 
 const RecordsPage = () => {
   const { data: records = [], isLoading } = useQuery({
     queryKey: ['records'],
-    queryFn: api.getRecords,
+    queryFn: recordService.getRecords,
   });
 
   return (

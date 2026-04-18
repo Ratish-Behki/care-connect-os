@@ -1,0 +1,240 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  patient
+  doctor
+  ambulance
+  hospital
+  admin
+}
+
+enum NotificationPriority {
+  low
+  medium
+  high
+}
+
+enum NotificationType {
+  appointment
+  records
+  schedule
+  emergency
+  system
+  profile
+  triage
+}
+
+enum NotificationRecipient {
+  patient
+  doctor
+  ambulance
+  hospital
+  admin
+  all
+}
+
+enum AppointmentStatus {
+  upcoming
+  completed
+  cancelled
+}
+
+enum AppointmentType {
+  in_person
+  video
+}
+
+enum EmergencyStatus {
+  pending
+  accepted
+  on_the_way
+  arrived
+  completed
+  cancelled
+}
+
+enum EmergencySeverity {
+  moderate
+  high
+  critical
+}
+
+enum TriageSeverity {
+  low
+  medium
+  high
+}
+
+enum CareSetting {
+  self_care
+  primary_care
+  urgent_care
+  emergency
+}
+
+model User {
+  id           String          @id @default(uuid())
+  name         String
+  email        String          @unique
+  role         UserRole
+  passwordHash String
+  avatar       String?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  profile        PatientProfile?
+  appointments   Appointment[]
+  records        MedicalRecord[]
+  notifications  Notification[]
+  emergencies    EmergencyRequest[]
+  triageRequests TriageRequest[]
+}
+
+model PatientProfile {
+  userId           String  @id
+  bloodGroup       String
+  allergies        String[]
+  diseases         String[]
+  medications      String[]
+  emergencyContact String
+  dateOfBirth      String
+  phone            String
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Doctor {
+  id               String   @id
+  name             String
+  specialization   String
+  experience       Int
+  rating           Float
+  avatar           String
+  available        Boolean
+  department       String
+  fee              Float
+  nextAvailable    String
+  hospitalId       String?
+  activeEmergencyId String?
+  lastUpdatedAt    DateTime?
+
+  hospital Hospital? @relation(fields: [hospitalId], references: [id])
+  appointments Appointment[]
+}
+
+model Hospital {
+  id                String   @id
+  name              String
+  address           String
+  phone             String
+  lat               Float
+  lng               Float
+  emergencyReadiness Float
+  icuBeds           Int
+  availableBeds     Int
+  specialistsOnDuty String[]
+
+  doctors Doctor[]
+}
+
+model Ambulance {
+  id               String   @id
+  driverName       String
+  phone            String
+  vehicleNumber    String
+  currentLatitude  Float
+  currentLongitude Float
+  availability     String
+  baseHospitalId   String
+  activeEmergencyId String?
+  lastUpdatedAt    DateTime?
+}
+
+model Appointment {
+  id             String            @id @default(uuid())
+  userId         String
+  doctorId       String?
+  doctorName     String
+  specialization String
+  date           String
+  time           String
+  status         AppointmentStatus
+  type           AppointmentType
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id])
+  doctor Doctor? @relation(fields: [doctorId], references: [id])
+}
+
+model MedicalRecord {
+  id            String   @id @default(uuid())
+  userId        String
+  date          String
+  diagnosis     String
+  doctorName    String
+  prescriptions String[]
+  notes         String
+  createdAt     DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+}
+
+model Notification {
+  id            String                @id @default(uuid())
+  recipientRole NotificationRecipient
+  type          NotificationType
+  priority      NotificationPriority
+  title         String
+  description   String
+  link          String?
+  read          Boolean               @default(false)
+  createdAt     DateTime              @default(now())
+  userId        String?
+
+  user User? @relation(fields: [userId], references: [id])
+}
+
+model EmergencyRequest {
+  id                   String            @id @default(uuid())
+  roomId               String
+  patientId            String
+  status               EmergencyStatus
+  severity             EmergencySeverity?
+  requiredSpecialty    String?
+  symptoms             String?
+  location             Json
+  patientLocationMapsUrl String
+  nearestHospital      Json
+  ambulanceId          String?
+  assignedAmbulance    Json?
+  ambulanceLocation    Json?
+  assignedDoctor       Json?
+  medicalSnapshot      Json?
+  emergencyContact     String?
+  familyContactNotified Boolean?
+  patientNote          String
+  handoffMessage       String
+  dispatchMetrics      Json?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  patient User @relation(fields: [patientId], references: [id])
+}
+
+model TriageRequest {
+  id        String   @id @default(uuid())
+  patientId String
+  symptoms  String
+  result    Json
+  createdAt DateTime @default(now())
+
+  patient User @relation(fields: [patientId], references: [id])
+}

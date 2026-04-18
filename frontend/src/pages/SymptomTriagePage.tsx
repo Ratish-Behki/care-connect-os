@@ -5,9 +5,9 @@ import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useToast } from '@/hooks/use-toast';
-import { api } from '@/lib/api';
+import { triageService } from '@/services/triageService';
 import type { SymptomTriageResult } from '@/types';
 
 const severityConfig = {
@@ -23,7 +23,7 @@ const SymptomTriagePage = () => {
   const { toast } = useToast();
 
   const analyzeMutation = useMutation({
-    mutationFn: api.analyzeSymptoms,
+    mutationFn: triageService.analyzeSymptoms,
     onSuccess: ({ result: triageResult }) => {
       setResult(triageResult);
       setIsAnalyzing(false);

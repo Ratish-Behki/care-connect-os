@@ -1,0 +1,17 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: care_connect_postgres
+    environment:
+      POSTGRES_USER: careconnect
+      POSTGRES_PASSWORD: careconnect
+      POSTGRES_DB: careconnect
+    ports:
+      - "5432:5432"
+    volumes:
+      - care_connect_pgdata:/var/lib/postgresql/data
+
+volumes:
+  care_connect_pgdata:

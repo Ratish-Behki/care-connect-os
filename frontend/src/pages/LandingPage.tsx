@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Heart, Shield, Clock, Ambulance, Stethoscope, CalendarCheck, Activity, ArrowRight, Phone, MapPin, Users, Mail } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import ThemeToggle from '@/components/ThemeToggle';
+import ThemeToggle from '@/components/common/ThemeToggle';
 import heroImage from '@/assets/hero-hospital.jpg';
 
 const features = [

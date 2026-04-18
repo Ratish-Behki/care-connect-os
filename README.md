@@ -66,10 +66,34 @@ Health check endpoint:
 
 `GET http://localhost:5000/api/health`
 
+## Database (PostgreSQL)
+
+This project uses PostgreSQL via Prisma. A Docker Compose setup is included.
+
+```bash
+# Start Postgres
+docker compose up -d
+
+# Create tables
+cd backend
+npx prisma migrate dev --name init
+
+# Seed demo data
+npx prisma db seed
+```
+
+Demo logins (password: `Password123!`):
+
+- patient@careconnect.demo
+- doctor@careconnect.demo
+- ambulance@careconnect.demo
+- hospital@careconnect.demo
+- admin@careconnect.demo
+
 ## Notes
 
 - Configure CORS origin in `backend/.env` with `FRONTEND_ORIGIN`.
 - If you change the frontend port, update `FRONTEND_ORIGIN` to match.
 - Configure `VITE_API_URL` in `frontend/.env` if backend runs on a different URL.
-- Configure `VITE_GOOGLE_MAPS_JS_API_KEY` in `frontend/.env` to enable live Google Maps emergency tracking.
+-- The live map uses OpenStreetMap tiles with Leaflet; no API key required. Install `leaflet` and `react-leaflet` in the frontend to enable the interactive map.
 - Run frontend and backend in separate terminals.

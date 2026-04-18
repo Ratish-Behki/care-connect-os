@@ -1,4 +1,18 @@
-import { createNotification, getEmergencyById, updateEmergencySession } from "../data/store.js";
+import { getEmergencyById, updateEmergencySession } from "../services/emergency.service.js";
+import { createNotification } from "../services/notification.service.js";
+
+
+/**
+It listens for real-time events like:
+
+emergency:join
+emergency:patient-location
+emergency:ambulance-location
+emergency:hospital-ready
+emergency:complete
+
+ */
+
 
 function emitEmergencySnapshot(io, emergency) {
   io.to(emergency.roomId).emit("emergency:update", {
@@ -8,13 +22,13 @@ function emitEmergencySnapshot(io, emergency) {
 
 export function registerEmergencyRealtime(io) {
   io.on("connection", (socket) => {
-    socket.on("emergency:join", ({ emergencyId, role }) => {
+    socket.on("emergency:join", async ({ emergencyId, role }) => {
       if (!emergencyId) {
         socket.emit("emergency:error", { message: "Emergency id is required." });
         return;
       }
 
-      const emergency = getEmergencyById(emergencyId);
+      const emergency = await getEmergencyById(emergencyId);
       if (!emergency) {
         socket.emit("emergency:error", { message: "Emergency request not found." });
         return;
@@ -23,7 +37,7 @@ export function registerEmergencyRealtime(io) {
       socket.join(emergency.roomId);
 
       if (role === "ambulance" && ["pending", "accepted"].includes(emergency.status)) {
-        const updatedEmergency = updateEmergencySession(emergencyId, {
+        const updatedEmergency = await updateEmergencySession(emergencyId, {
           status: "on_the_way",
         });
 
@@ -63,12 +77,12 @@ export function registerEmergencyRealtime(io) {
       emitEmergencySnapshot(io, emergency);
     });
 
-    socket.on("emergency:patient-location", ({ emergencyId, location }) => {
+    socket.on("emergency:patient-location", async ({ emergencyId, location }) => {
       if (!emergencyId || !location) {
         return;
       }
 
-      const emergency = updateEmergencySession(emergencyId, {
+      const emergency = await updateEmergencySession(emergencyId, {
         location,
       });
 
@@ -77,12 +91,12 @@ export function registerEmergencyRealtime(io) {
       }
     });
 
-    socket.on("emergency:ambulance-location", ({ emergencyId, location }) => {
+    socket.on("emergency:ambulance-location", async ({ emergencyId, location }) => {
       if (!emergencyId || !location) {
         return;
       }
 
-      const emergency = updateEmergencySession(emergencyId, {
+      const emergency = await updateEmergencySession(emergencyId, {
         ambulanceLocation: location,
       });
 
@@ -91,12 +105,12 @@ export function registerEmergencyRealtime(io) {
       }
     });
 
-    socket.on("emergency:hospital-ready", ({ emergencyId }) => {
+    socket.on("emergency:hospital-ready", async ({ emergencyId }) => {
       if (!emergencyId) {
         return;
       }
 
-      const emergency = updateEmergencySession(emergencyId, {
+      const emergency = await updateEmergencySession(emergencyId, {
         status: "arrived",
       });
 
@@ -114,12 +128,12 @@ export function registerEmergencyRealtime(io) {
       }
     });
 
-    socket.on("emergency:complete", ({ emergencyId }) => {
+    socket.on("emergency:complete", async ({ emergencyId }) => {
       if (!emergencyId) {
         return;
       }
 
-      const emergency = updateEmergencySession(emergencyId, {
+      const emergency = await updateEmergencySession(emergencyId, {
         status: "completed",
       });
 
