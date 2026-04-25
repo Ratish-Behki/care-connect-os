@@ -13,6 +13,9 @@ import {
 } from "./emergency.geo.js";
 import { normalizeDoctorSpecialties } from "./emergency.utils.js";
 
+// =========================
+// 🏥 DATA FETCHERS
+// =========================
 export async function getHospitals() {
   const hospitals = await prisma.hospital.findMany();
   return hospitals.length ? hospitals : EMERGENCY_HOSPITALS;
@@ -28,51 +31,92 @@ export async function getDoctors() {
   return doctors.length ? doctors : DOCTOR_DIRECTORY;
 }
 
+// =========================
+// 🏥 RESERVE HOSPITAL CAPACITY
+// =========================
 export async function reserveHospitalCapacity(hospitalId, severity) {
-  const hospital = await prisma.hospital.findUnique({
-    where: { id: hospitalId },
-  });
+  try {
+    const hospital = await prisma.hospital.findUnique({
+      where: { id: hospitalId },
+    });
 
-  if (!hospital) {
-    return;
+    if (!hospital) {
+      throw new Error("Hospital not found");
+    }
+
+    if (hospital.availableBeds <= 0) {
+      throw new Error("No beds available in hospital");
+    }
+
+    const bedReduction = severity === "critical" ? 2 : 1;
+
+    const nextBeds = Math.max(0, hospital.availableBeds - bedReduction);
+    const nextIcuBeds =
+      severity === "critical"
+        ? Math.max(0, hospital.icuBeds - 1)
+        : hospital.icuBeds;
+
+    await prisma.hospital.update({
+      where: { id: hospitalId },
+      data: {
+        availableBeds: nextBeds,
+        icuBeds: nextIcuBeds,
+      },
+    });
+
+    console.log("🏥 Capacity reserved:", hospitalId);
+  } catch (err) {
+    console.error("❌ Hospital capacity error:", err.message);
+    throw err;
   }
-
-  const bedReduction = severity === "critical" ? 2 : 1;
-  const nextBeds = Math.max(0, hospital.availableBeds - bedReduction);
-  const nextIcuBeds = severity === "critical" ? Math.max(0, hospital.icuBeds - 1) : hospital.icuBeds;
-
-  await prisma.hospital.update({
-    where: { id: hospitalId },
-    data: {
-      availableBeds: nextBeds,
-      icuBeds: nextIcuBeds,
-    },
-  });
 }
 
+// =========================
+// 🚑 AMBULANCE SELECTION
+// =========================
 function selectAvailableAmbulance(location, ambulances) {
-  const availableAmbulances = ambulances.filter((ambulance) => ambulance.availability === "available");
+  if (!ambulances || ambulances.length === 0) {
+    throw new Error("No ambulances available");
+  }
 
-  if (availableAmbulances.length === 0) {
+  const available = ambulances.filter(
+    (a) => a.availability === "available"
+  );
+
+  if (available.length === 0) {
     const fallback = ambulances[0];
+
+    const currentLocation = {
+      lat: fallback.currentLatitude,
+      lng: fallback.currentLongitude,
+    };
+
+    const distanceKm = getDistanceKm(location, currentLocation);
 
     return {
       ...fallback,
-      currentLocation: { lat: fallback.currentLatitude, lng: fallback.currentLongitude },
-      distanceKm: roundTo(getDistanceKm(location, { lat: fallback.currentLatitude, lng: fallback.currentLongitude }), 1),
+      currentLocation,
+      distanceKm: roundTo(distanceKm, 1),
       etaMinutes: estimateTravelMinutes(
-        getDistanceKm(location, { lat: fallback.currentLatitude, lng: fallback.currentLongitude }),
+        distanceKm,
         getTrafficMultiplier(location)
       ),
       wasFallback: true,
     };
   }
 
-  const ranked = availableAmbulances
+  const ranked = available
     .map((ambulance) => {
-      const currentLocation = { lat: ambulance.currentLatitude, lng: ambulance.currentLongitude };
+      const currentLocation = {
+        lat: ambulance.currentLatitude,
+        lng: ambulance.currentLongitude,
+      };
+
       const distanceKm = getDistanceKm(location, currentLocation);
-      const etaMinutes = estimateTravelMinutes(distanceKm, getTrafficMultiplier(location));
+      const etaMinutes = estimateTravelMinutes(
+        distanceKm,
+        getTrafficMultiplier(location)
+      );
 
       return {
         ...ambulance,
@@ -89,90 +133,139 @@ function selectAvailableAmbulance(location, ambulances) {
   };
 }
 
+// =========================
+// 🚑 ASSIGN AMBULANCE
+// =========================
 export async function assignNearestAmbulance(location, emergencyId) {
-  const ambulances = await getAmbulances();
-  const selected = selectAvailableAmbulance(location, ambulances);
+  try {
+    const ambulances = await getAmbulances();
+    const selected = selectAvailableAmbulance(location, ambulances);
 
-  if (!selected || selected.distanceKm > 90) {
-    const dynamicAmbulance = {
-      id: `A-DYN-${emergencyId.slice(0, 4).toUpperCase()}`,
-      driverName: "Auto Dispatch Unit",
-      phone: "+91 1800 911 108",
-      vehicleNumber: `DYN-${emergencyId.slice(0, 4).toUpperCase()}`,
-      currentLatitude: roundTo(location.lat + 0.017, 5),
-      currentLongitude: roundTo(location.lng - 0.013, 5),
-      availability: "dispatched",
-      baseHospitalId: "dynamic-local-network",
-      activeEmergencyId: emergencyId,
-      lastUpdatedAt: new Date(),
-    };
+    if (!selected || selected.distanceKm > 90) {
+      console.log("⚠️ Using dynamic ambulance");
 
-    const distanceKm = getDistanceKm(location, {
-      lat: dynamicAmbulance.currentLatitude,
-      lng: dynamicAmbulance.currentLongitude,
-    });
+      const dynamicAmbulance = {
+        id: `A-DYN-${emergencyId.slice(0, 4).toUpperCase()}`,
+        driverName: "Auto Dispatch Unit",
+        phone: "+91 1800 911 108",
+        vehicleNumber: `DYN-${emergencyId.slice(0, 4).toUpperCase()}`,
+        currentLatitude: roundTo(location.lat + 0.017, 5),
+        currentLongitude: roundTo(location.lng - 0.013, 5),
+        availability: "dispatched",
+        baseHospitalId: "dynamic-local-network",
+        activeEmergencyId: emergencyId,
+        lastUpdatedAt: new Date(),
+      };
 
-    await prisma.ambulance.create({
-      data: dynamicAmbulance,
-    });
-
-    return {
-      ...dynamicAmbulance,
-      currentLocation: {
+      const distanceKm = getDistanceKm(location, {
         lat: dynamicAmbulance.currentLatitude,
         lng: dynamicAmbulance.currentLongitude,
-      },
-      distanceKm: roundTo(distanceKm, 1),
-      etaMinutes: estimateTravelMinutes(distanceKm, getTrafficMultiplier(location)),
-      wasFallback: true,
-    };
-  }
+      });
 
-  await prisma.ambulance.update({
-    where: { id: selected.id },
-    data: {
-      availability: "dispatched",
-      activeEmergencyId: emergencyId,
-      lastUpdatedAt: new Date(),
-    },
-  });
-
-  return selected;
-}
-
-function rankDoctorsForEmergency({ hospitalId, requiredSpecialty, severity, doctors }) {
-  const availableDoctors = doctors.filter((doctor) => doctor.available);
-  const normalizedDoctors = availableDoctors.map(normalizeDoctorSpecialties);
-
-  const ranked = normalizedDoctors
-    .map((doctor) => {
-      const sameHospital = doctor.hospitalId === hospitalId ? 1 : 0.65;
-      const specialtyMatch = doctor.specialtyTags.includes(requiredSpecialty)
-        ? 1
-        : doctor.specialtyTags.includes("general")
-          ? 0.7
-          : 0.45;
-      const seniorityScore = clamp(doctor.experience / 18, 0.4, 1);
-      const criticalBoost = severity === "critical" && specialtyMatch === 1 ? 0.1 : 0;
-
-      const score = sameHospital * 0.45 + specialtyMatch * 0.35 + seniorityScore * 0.2 + criticalBoost;
+      await prisma.ambulance.create({
+        data: dynamicAmbulance,
+      });
 
       return {
-        ...doctor,
-        score: roundTo(score, 3),
+        ...dynamicAmbulance,
+        currentLocation: {
+          lat: dynamicAmbulance.currentLatitude,
+          lng: dynamicAmbulance.currentLongitude,
+        },
+        distanceKm: roundTo(distanceKm, 1),
+        etaMinutes: estimateTravelMinutes(
+          distanceKm,
+          getTrafficMultiplier(location)
+        ),
+        wasFallback: true,
       };
-    })
-    .sort((a, b) => b.score - a.score);
+    }
 
-  return ranked;
+    await prisma.ambulance.update({
+      where: { id: selected.id },
+      data: {
+        availability: "dispatched",
+        activeEmergencyId: emergencyId,
+        lastUpdatedAt: new Date(),
+      },
+    });
+
+    console.log("🚑 Assigned ambulance:", selected.id);
+
+    return selected;
+  } catch (err) {
+    console.error("❌ Ambulance assignment failed:", err.message);
+    throw new Error("Failed to assign ambulance");
+  }
 }
 
-export async function assignDoctorForEmergency({ hospitalId, requiredSpecialty, severity, emergencyId }) {
-  const doctors = await getDoctors();
-  const ranked = rankDoctorsForEmergency({ hospitalId, requiredSpecialty, severity, doctors });
-  const selected = ranked[0] || normalizeDoctorSpecialties(doctors[0]);
+// =========================
+// 👨‍⚕️ DOCTOR SELECTION
+// =========================
+function rankDoctorsForEmergency({
+  hospitalId,
+  requiredSpecialty,
+  severity,
+  doctors,
+}) {
+  const availableDoctors = doctors.filter((d) => d.available);
 
-  if (selected?.id) {
+  if (!availableDoctors.length) {
+    throw new Error("No doctors available");
+  }
+
+  const normalized = availableDoctors.map(normalizeDoctorSpecialties);
+
+  return normalized
+    .map((doctor) => {
+      const sameHospital = doctor.hospitalId === hospitalId ? 1 : 0.65;
+      const specialtyMatch = doctor.specialtyTags.includes(
+        requiredSpecialty
+      )
+        ? 1
+        : doctor.specialtyTags.includes("general")
+        ? 0.7
+        : 0.45;
+
+      const seniorityScore = clamp(doctor.experience / 18, 0.4, 1);
+      const criticalBoost =
+        severity === "critical" && specialtyMatch === 1 ? 0.1 : 0;
+
+      const score =
+        sameHospital * 0.45 +
+        specialtyMatch * 0.35 +
+        seniorityScore * 0.2 +
+        criticalBoost;
+
+      return { ...doctor, score: roundTo(score, 3) };
+    })
+    .sort((a, b) => b.score - a.score);
+}
+
+// =========================
+// 👨‍⚕️ ASSIGN DOCTOR
+// =========================
+export async function assignDoctorForEmergency({
+  hospitalId,
+  requiredSpecialty,
+  severity,
+  emergencyId,
+}) {
+  try {
+    const doctors = await getDoctors();
+    const ranked = rankDoctorsForEmergency({
+      hospitalId,
+      requiredSpecialty,
+      severity,
+      doctors,
+    });
+
+    const selected = ranked[0];
+
+    if (!selected) {
+      throw new Error("No doctor could be assigned");
+    }
+
     await prisma.doctor.update({
       where: { id: selected.id },
       data: {
@@ -181,39 +274,52 @@ export async function assignDoctorForEmergency({ hospitalId, requiredSpecialty, 
         lastUpdatedAt: new Date(),
       },
     });
-  }
 
-  return selected;
+    console.log("👨‍⚕️ Assigned doctor:", selected.name);
+
+    return selected;
+  } catch (err) {
+    console.error("❌ Doctor assignment failed:", err.message);
+    throw new Error("Failed to assign doctor");
+  }
 }
 
+// =========================
+// 🔄 RELEASE RESOURCES
+// =========================
 export async function releaseEmergencyResources(emergency) {
-  if (emergency.ambulanceId) {
-    await prisma.ambulance
-      .update({
-        where: { id: emergency.ambulanceId },
-        data: {
-          availability: "available",
-          activeEmergencyId: null,
-          lastUpdatedAt: new Date(),
-        },
-      })
-      .catch(() => null);
-  }
+  await Promise.all([
+    emergency.ambulanceId
+      ? prisma.ambulance
+          .update({
+            where: { id: emergency.ambulanceId },
+            data: {
+              availability: "available",
+              activeEmergencyId: null,
+              lastUpdatedAt: new Date(),
+            },
+          })
+          .catch(() => null)
+      : null,
 
-  if (emergency.assignedDoctor?.id) {
-    await prisma.doctor
-      .update({
-        where: { id: emergency.assignedDoctor.id },
-        data: {
-          available: true,
-          activeEmergencyId: null,
-          lastUpdatedAt: new Date(),
-        },
-      })
-      .catch(() => null);
-  }
+    emergency.assignedDoctor?.id
+      ? prisma.doctor
+          .update({
+            where: { id: emergency.assignedDoctor.id },
+            data: {
+              available: true,
+              activeEmergencyId: null,
+              lastUpdatedAt: new Date(),
+            },
+          })
+          .catch(() => null)
+      : null,
+  ]);
 }
 
+// =========================
+// 📊 RESOURCES SNAPSHOT
+// =========================
 export async function getEmergencyResources() {
   const [ambulances, hospitals, doctors] = await Promise.all([
     prisma.ambulance.findMany(),
@@ -222,30 +328,30 @@ export async function getEmergencyResources() {
   ]);
 
   return {
-    ambulances: ambulances.map((ambulance) => ({
-      id: ambulance.id,
-      driverName: ambulance.driverName,
-      availability: ambulance.availability,
+    ambulances: ambulances.map((a) => ({
+      id: a.id,
+      driverName: a.driverName,
+      availability: a.availability,
       location: {
-        lat: ambulance.currentLatitude,
-        lng: ambulance.currentLongitude,
+        lat: a.currentLatitude,
+        lng: a.currentLongitude,
       },
-      activeEmergencyId: ambulance.activeEmergencyId,
+      activeEmergencyId: a.activeEmergencyId,
     })),
-    hospitals: hospitals.map((hospital) => ({
-      id: hospital.id,
-      name: hospital.name,
-      availableBeds: hospital.availableBeds,
-      icuBeds: hospital.icuBeds,
-      emergencyReadiness: hospital.emergencyReadiness,
+    hospitals: hospitals.map((h) => ({
+      id: h.id,
+      name: h.name,
+      availableBeds: h.availableBeds,
+      icuBeds: h.icuBeds,
+      emergencyReadiness: h.emergencyReadiness,
     })),
-    doctors: doctors.map((doctor) => ({
-      id: doctor.id,
-      name: doctor.name,
-      specialization: doctor.specialization,
-      available: doctor.available,
-      hospitalId: doctor.hospitalId,
-      activeEmergencyId: doctor.activeEmergencyId,
+    doctors: doctors.map((d) => ({
+      id: d.id,
+      name: d.name,
+      specialization: d.specialization,
+      available: d.available,
+      hospitalId: d.hospitalId,
+      activeEmergencyId: d.activeEmergencyId,
     })),
   };
 }

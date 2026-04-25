@@ -12,70 +12,126 @@ import {
   updateEmergencyStatus,
 } from "./emergency.status.js";
 
-export async function createEmergencyCase({ patientId, location, symptoms, patientNote }) {
-  const emergencyRequest = await createEmergencyDispatch({
-    patientId,
-    location,
-    symptoms,
-    patientNote,
-  });
+// =========================
+// 🚨 CREATE EMERGENCY CASE
+// =========================
+export async function createEmergencyCase({
+  patientId,
+  location,
+  symptoms,
+  patientNote,
+}) {
+  try {
+    // 🔒 VALIDATION
+    if (!patientId) {
+      throw new Error("Patient ID is required");
+    }
 
-  await Promise.all([
-    createNotification({
-      recipientRole: "patient",
-      type: "emergency",
-      priority: "high",
-      title: "Ambulance dispatched",
-      description: `Ambulance ${emergencyRequest.assignedAmbulance.id} assigned. ${emergencyRequest.nearestHospital.name} and ${emergencyRequest.assignedDoctor.name} are ready.`,
-      link: "/emergency",
-    }),
-    createNotification({
-      recipientRole: "ambulance",
-      type: "emergency",
-      priority: "high",
-      title: "New emergency dispatch",
-      description: `Pickup location ${emergencyRequest.location.lat.toFixed(4)}, ${emergencyRequest.location.lng.toFixed(4)}. ETA target ${emergencyRequest.dispatchMetrics.ambulanceEtaMinutes} min. Destination: ${emergencyRequest.nearestHospital.name}.`,
-      link: "/emergency",
-    }),
-    createNotification({
-      recipientRole: "hospital",
-      type: "emergency",
-      priority: "high",
-      title: "Incoming emergency patient",
-      description: `${emergencyRequest.handoffMessage} Medical snapshot shared for triage preparation.`,
-      link: "/emergency",
-    }),
-    createNotification({
-      recipientRole: "doctor",
-      type: "emergency",
-      priority: "high",
-      title: `Case assigned: ${emergencyRequest.assignedDoctor.name}`,
-      description: `Severity ${emergencyRequest.severity.toUpperCase()} | Specialty ${emergencyRequest.requiredSpecialty}. Blood group ${emergencyRequest.medicalSnapshot.bloodGroup}.`,
-      link: "/emergency",
-    }),
-    createNotification({
-      recipientRole: "patient",
-      type: "emergency",
-      priority: "medium",
-      title: "Family contact notified",
-      description: `Emergency alert sent to ${emergencyRequest.emergencyContact}.`,
-      link: "/emergency",
-    }),
-    createNotification({
-      recipientRole: "admin",
-      type: "emergency",
-      priority: "high",
-      title: "Emergency case created",
-      description: `Dispatch SLA started (${emergencyRequest.dispatchMetrics.responseWindowSeconds}s window). Hospital score ${emergencyRequest.dispatchMetrics.hospitalScore}.`,
-      link: "/analytics",
-    }),
-  ]);
+    if (!location?.lat || !location?.lng) {
+      throw new Error("Invalid location provided");
+    }
 
-  return {
-    emergency: emergencyRequest,
-  };
+    // 🚑 CREATE DISPATCH (core logic)
+    const emergencyRequest = await createEmergencyDispatch({
+      patientId,
+      location,
+      symptoms,
+      patientNote,
+    });
+
+    // 🔔 NOTIFICATIONS (parallel)
+    await Promise.all([
+      createNotification({
+        recipientRole: "patient",
+        type: "emergency",
+        priority: "high",
+        title: "🚑 Ambulance dispatched",
+        description: `Ambulance ${
+          emergencyRequest.assignedAmbulance?.id || "assigned"
+        } is on the way. ${
+          emergencyRequest.nearestHospital?.name || "Hospital"
+        } is ready.`,
+        link: "/emergency",
+      }),
+
+      createNotification({
+        recipientRole: "ambulance",
+        type: "emergency",
+        priority: "high",
+        title: "🚨 New emergency dispatch",
+        description: `Pickup at ${
+          emergencyRequest.location?.lat?.toFixed(4)
+        }, ${emergencyRequest.location?.lng?.toFixed(4)}. ETA ${
+          emergencyRequest.dispatchMetrics?.ambulanceEtaMinutes || 10
+        } min.`,
+        link: "/emergency",
+      }),
+
+      createNotification({
+        recipientRole: "hospital",
+        type: "emergency",
+        priority: "high",
+        title: "🏥 Incoming emergency",
+        description: `${
+          emergencyRequest.handoffMessage || "Prepare for emergency intake"
+        }`,
+        link: "/emergency",
+      }),
+
+      createNotification({
+        recipientRole: "doctor",
+        type: "emergency",
+        priority: "high",
+        title: `👨‍⚕️ Case assigned`,
+        description: `Severity ${
+          emergencyRequest.severity?.toUpperCase() || "UNKNOWN"
+        } | Specialty ${
+          emergencyRequest.requiredSpecialty || "General"
+        }`,
+        link: "/emergency",
+      }),
+
+      createNotification({
+        recipientRole: "patient",
+        type: "emergency",
+        priority: "medium",
+        title: "📞 Family notified",
+        description: `Emergency alert sent to ${
+          emergencyRequest.emergencyContact || "contact"
+        }`,
+        link: "/emergency",
+      }),
+
+      createNotification({
+        recipientRole: "admin",
+        type: "emergency",
+        priority: "high",
+        title: "📊 Emergency created",
+        description: `Response window ${
+          emergencyRequest.dispatchMetrics?.responseWindowSeconds || 60
+        }s | Score ${
+          emergencyRequest.dispatchMetrics?.hospitalScore || "N/A"
+        }`,
+        link: "/analytics",
+      }),
+    ]);
+
+    // ✅ RETURN FINAL RESPONSE
+    return {
+      emergency: emergencyRequest,
+    };
+  } catch (error) {
+    console.error("❌ Emergency creation failed:", error.message);
+
+    throw new Error(
+      error.message || "Failed to create emergency case"
+    );
+  }
 }
 
+// =========================
+// 📦 EXPORTS (CORE SERVICES)
+// =========================
 export {
   createEmergencyDispatch,
   createEmergencyRoomId,

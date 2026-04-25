@@ -24,27 +24,38 @@ import {
   normalizeCoordinates,
 } from "./emergency.utils.js";
 
+// =========================
+// 🧠 AI HOSPITAL SCORING (UPDATED)
+// =========================
 function scoreHospitalCandidate({ hospital, location, requiredSpecialty, severity }) {
   const distanceKm = getDistanceKm(location, hospital);
   const trafficMultiplier = getTrafficMultiplier(location);
   const etaMinutes = estimateTravelMinutes(distanceKm, trafficMultiplier);
-  const distanceScore = clamp(1 - distanceKm / 40, 0, 1);
+
+  // 🔥 HARD FILTER (ignore far hospitals)
+  if (distanceKm > 50) return null;
+
+  const distanceScore = clamp(1 - distanceKm / 50, 0, 1);
   const bedCapacity = hospital.availableBeds + hospital.icuBeds;
   const capacityScore = clamp(bedCapacity / 80, 0.1, 1);
+
   const icuImportance = severity === "critical" ? 0.2 : 0.08;
   const icuScore = clamp(hospital.icuBeds / 40, 0.1, 1);
+
   const specialistMatch = hospital.specialistsOnDuty.includes(requiredSpecialty)
     ? 1
     : hospital.specialistsOnDuty.includes("general")
-      ? 0.7
-      : 0.4;
+    ? 0.7
+    : 0.4;
+
   const readinessScore = clamp(Number(hospital.emergencyReadiness || 0.75), 0.5, 1);
 
+  // 🔥 DISTANCE DOMINATES
   const score =
-    distanceScore * 0.35 +
-    capacityScore * 0.2 +
-    specialistMatch * 0.22 +
-    readinessScore * 0.15 +
+    distanceScore * 0.5 +
+    capacityScore * 0.15 +
+    specialistMatch * 0.15 +
+    readinessScore * 0.1 +
     icuScore * icuImportance;
 
   return {
@@ -59,15 +70,30 @@ function scoreHospitalCandidate({ hospital, location, requiredSpecialty, severit
   };
 }
 
+// =========================
+// 🏥 BEST HOSPITAL (UPDATED)
+// =========================
 async function getBestHospitalForEmergency(location, { requiredSpecialty, severity }) {
   const hospitals = await getHospitals();
+
+  if (!hospitals || hospitals.length === 0) {
+    throw new Error("No hospitals available");
+  }
+
   const ranked = hospitals
-    .map((hospital) => scoreHospitalCandidate({ hospital, location, requiredSpecialty, severity }))
+    .map((hospital) =>
+      scoreHospitalCandidate({ hospital, location, requiredSpecialty, severity })
+    )
+    .filter(Boolean) // 🔥 remove far hospitals
     .sort((a, b) => b.score - a.score);
 
-  if (ranked[0] && ranked[0].distanceKm > 120) {
+  // 🔥 if no nearby hospital → fallback
+  if (!ranked.length) {
     const dynamicHospitals = buildDynamicLocalHospitals(location, requiredSpecialty)
-      .map((hospital) => scoreHospitalCandidate({ hospital, location, requiredSpecialty, severity }))
+      .map((hospital) =>
+        scoreHospitalCandidate({ hospital, location, requiredSpecialty, severity })
+      )
+      .filter(Boolean)
       .sort((a, b) => b.score - a.score);
 
     return {
@@ -77,15 +103,19 @@ async function getBestHospitalForEmergency(location, { requiredSpecialty, severi
   }
 
   return {
-    ...(ranked[0] || scoreHospitalCandidate({ hospital: hospitals[0], location, requiredSpecialty, severity })),
-    selectedBy: "weighted-score",
+    ...ranked[0],
+    selectedBy: "weighted-nearest-score",
   };
 }
 
+// =========================
+// 📋 PATIENT SNAPSHOT
+// =========================
 async function buildPatientMedicalSnapshot(patientId) {
   const profile = await prisma.patientProfile.findUnique({
     where: { userId: patientId },
   });
+
   const records = await prisma.medicalRecord.findMany({
     where: { userId: patientId },
     orderBy: { createdAt: "desc" },
@@ -103,101 +133,141 @@ async function buildPatientMedicalSnapshot(patientId) {
   };
 }
 
+// =========================
+// 🆔 ROOM ID
+// =========================
 export function createEmergencyRoomId(emergencyId) {
   return `emergency:${emergencyId}`;
 }
 
+// =========================
+// 🏥 PUBLIC HELPER
+// =========================
 export async function getNearestHospital(location) {
   const normalizedLocation = normalizeCoordinates(location);
+
   return getBestHospitalForEmergency(normalizedLocation, {
     requiredSpecialty: "general",
     severity: "moderate",
   });
 }
 
-export async function createEmergencyDispatch({ patientId, location, symptoms, patientNote }) {
-  const normalizedLocation = normalizeCoordinates(location);
-  const severity = inferSeverity(symptoms, patientNote);
-  const requiredSpecialty = inferRequiredSpecialty(symptoms);
-  const emergencyId = randomUUID();
+// =========================
+// 🚑 MAIN DISPATCH
+// =========================
+export async function createEmergencyDispatch({
+  patientId,
+  location,
+  symptoms,
+  patientNote,
+}) {
+  try {
+    const normalizedLocation = normalizeCoordinates(location);
+    const severity = inferSeverity(symptoms, patientNote);
+    const requiredSpecialty = inferRequiredSpecialty(symptoms);
 
-  const selectedHospital = await getBestHospitalForEmergency(normalizedLocation, {
-    requiredSpecialty,
-    severity,
-  });
+    const emergencyId = randomUUID();
 
-  await reserveHospitalCapacity(selectedHospital.id, severity);
-
-  const assignedAmbulance = await assignNearestAmbulance(normalizedLocation, emergencyId);
-  const assignedDoctor = await assignDoctorForEmergency({
-    hospitalId: selectedHospital.id,
-    requiredSpecialty,
-    severity,
-    emergencyId,
-  });
-
-  const assignedAmbulancePayload = {
-    ...assignedAmbulance,
-    lastUpdatedAt: assignedAmbulance.lastUpdatedAt
-      ? new Date(assignedAmbulance.lastUpdatedAt).toISOString()
-      : undefined,
-  };
-
-  const assignedDoctorPayload = assignedDoctor
-    ? {
-        ...assignedDoctor,
-        lastUpdatedAt: assignedDoctor.lastUpdatedAt
-          ? new Date(assignedDoctor.lastUpdatedAt).toISOString()
-          : undefined,
-      }
-    : null;
-
-  const medicalSnapshot = await buildPatientMedicalSnapshot(patientId);
-  const handoffMessage = buildHospitalHandoffMessage({
-    emergencyId,
-    hospital: selectedHospital,
-    doctor: assignedDoctor,
-    severity,
-    symptoms,
-    ambulance: assignedAmbulance,
-  });
-
-  const emergency = await prisma.emergencyRequest.create({
-    data: {
-      id: emergencyId,
-      roomId: createEmergencyRoomId(randomUUID()),
-      patientId,
-      status: "pending",
-      severity,
+    const selectedHospital = await getBestHospitalForEmergency(normalizedLocation, {
       requiredSpecialty,
-      symptoms: typeof symptoms === "string" ? symptoms.trim() : "",
-      location: normalizedLocation,
-      patientLocationMapsUrl: buildPatientLocationMapsUrl(normalizedLocation),
-      nearestHospital: selectedHospital,
-      ambulanceId: assignedAmbulance.id,
-      assignedAmbulance: assignedAmbulancePayload,
-      ambulanceLocation: {
-        lat: assignedAmbulance.currentLocation.lat,
-        lng: assignedAmbulance.currentLocation.lng,
-        source: "dispatch",
-      },
-      assignedDoctor: assignedDoctorPayload,
-      medicalSnapshot,
-      emergencyContact: medicalSnapshot.emergencyContact,
-      familyContactNotified: Boolean(medicalSnapshot.emergencyContact),
-      patientNote: typeof patientNote === "string" ? patientNote.trim() : "",
-      handoffMessage,
-      dispatchMetrics: {
-        ambulanceDistanceKm: assignedAmbulance.distanceKm,
-        ambulanceEtaMinutes: assignedAmbulance.etaMinutes,
-        hospitalDistanceKm: selectedHospital.distanceKm,
-        hospitalEtaMinutes: selectedHospital.etaMinutes,
-        hospitalScore: selectedHospital.score,
-        trafficMultiplier: selectedHospital.trafficMultiplier,
-        responseWindowSeconds: Math.max(60, Math.round((assignedAmbulance.etaMinutes || 8) * 40)),
-      },
-    },
-  });
+      severity,
+    });
 
-  return emergency;
+// 🛠️ SAFE CAPACITY RESERVATION
+try {
+  await reserveHospitalCapacity(selectedHospital.id, severity);
+} catch (err) {
+  console.warn(
+    "⚠️ Skipping hospital capacity update (not in DB):",
+    selectedHospital.id
+  );
+}
+    const assignedAmbulance = await assignNearestAmbulance(
+      normalizedLocation,
+      emergencyId
+    );
+
+    if (!assignedAmbulance) {
+      throw new Error("No ambulance available");
+    }
+
+    const assignedDoctor = await assignDoctorForEmergency({
+      hospitalId: selectedHospital.id,
+      requiredSpecialty,
+      severity,
+      emergencyId,
+    });
+
+    console.log("🚑 Emergency Dispatch Created:", emergencyId);
+    console.log("🏥 Hospital:", selectedHospital.name);
+    console.log("🚑 Ambulance:", assignedAmbulance.id);
+
+    const medicalSnapshot = await buildPatientMedicalSnapshot(patientId);
+
+    const handoffMessage = buildHospitalHandoffMessage({
+      emergencyId,
+      hospital: selectedHospital,
+      doctor: assignedDoctor,
+      severity,
+      symptoms,
+      ambulance: assignedAmbulance,
+    });
+
+    const emergency = await prisma.emergencyRequest.create({
+      data: {
+        id: emergencyId,
+
+        // 🔥 FIXED ROOM ID
+        roomId: createEmergencyRoomId(emergencyId),
+
+        patientId,
+        status: "pending",
+        severity,
+        requiredSpecialty,
+        symptoms: typeof symptoms === "string" ? symptoms.trim() : "",
+
+        location: normalizedLocation,
+        patientLocationMapsUrl: buildPatientLocationMapsUrl(normalizedLocation),
+
+        nearestHospital: selectedHospital,
+
+        ambulanceId: assignedAmbulance.id,
+        assignedAmbulance,
+
+        ambulanceLocation: {
+          lat: assignedAmbulance.currentLocation.lat,
+          lng: assignedAmbulance.currentLocation.lng,
+          source: "dispatch",
+        },
+
+        assignedDoctor,
+
+        medicalSnapshot,
+        emergencyContact: medicalSnapshot.emergencyContact,
+        familyContactNotified: Boolean(medicalSnapshot.emergencyContact),
+
+        patientNote: typeof patientNote === "string" ? patientNote.trim() : "",
+
+        handoffMessage,
+
+        dispatchMetrics: {
+          ambulanceDistanceKm: assignedAmbulance.distanceKm,
+          ambulanceEtaMinutes: assignedAmbulance.etaMinutes,
+          hospitalDistanceKm: selectedHospital.distanceKm,
+          hospitalEtaMinutes: selectedHospital.etaMinutes,
+          hospitalScore: selectedHospital.score,
+          trafficMultiplier: selectedHospital.trafficMultiplier,
+          responseWindowSeconds: Math.max(
+            60,
+            Math.round((assignedAmbulance.etaMinutes || 8) * 40)
+          ),
+        },
+      },
+    });
+
+    return emergency;
+  } catch (error) {
+    console.error("❌ Dispatch error:", error.message);
+    throw new Error("Failed to dispatch emergency");
+  }
 }

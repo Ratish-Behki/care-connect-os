@@ -1,15 +1,28 @@
-export type UserRole = 'patient' | 'doctor' | 'ambulance' | 'hospital' | 'admin';
+// ======================
+// 🔹 COMMON TYPES
+// ======================
 
-export type NotificationPriority = 'low' | 'medium' | 'high';
+export type UserRole =
+  | "patient"
+  | "doctor"
+  | "ambulance"
+  | "hospital"
+  | "admin";
+
+export type NotificationPriority = "low" | "medium" | "high";
 
 export type NotificationType =
-  | 'appointment'
-  | 'records'
-  | 'schedule'
-  | 'emergency'
-  | 'system'
-  | 'profile'
-  | 'triage';
+  | "appointment"
+  | "records"
+  | "schedule"
+  | "emergency"
+  | "system"
+  | "profile"
+  | "triage";
+
+// ======================
+// 🔹 USER & PROFILE
+// ======================
 
 export interface User {
   id: string;
@@ -29,6 +42,10 @@ export interface PatientProfile {
   dateOfBirth: string;
   phone: string;
 }
+
+// ======================
+// 🔹 DOCTOR & APPOINTMENT
+// ======================
 
 export interface Doctor {
   id: string;
@@ -50,8 +67,8 @@ export interface Appointment {
   specialization: string;
   date: string;
   time: string;
-  status: 'upcoming' | 'completed' | 'cancelled';
-  type: 'in-person' | 'video';
+  status: "upcoming" | "completed" | "cancelled";
+  type: "in-person" | "video";
 }
 
 export interface MedicalRecord {
@@ -63,47 +80,90 @@ export interface MedicalRecord {
   notes: string;
 }
 
+// ======================
+// 🔹 LOCATION SYSTEM (FIXED)
+// ======================
+
+export type LocationSource = "browser" | "live" | "fallback";
+
 export interface EmergencyLocation {
   lat: number;
   lng: number;
   accuracy?: number;
   address?: string;
-  source?: 'browser' | 'manual' | 'fallback';
+  source: LocationSource;
+  timestamp?: number;
 }
+
+// ======================
+// 🔹 STATUS ENUMS (NEW)
+// ======================
+
+export type EmergencyStatus =
+  | "requested"
+  | "accepted"
+  | "en_route"
+  | "arrived"
+  | "completed"
+  | "cancelled";
+
+export type EmergencySeverity =
+  | "low"
+  | "moderate"
+  | "high"
+  | "critical";
+
+export type AmbulanceStatus = "available" | "busy" | "offline";
+
+// ======================
+// 🔹 HOSPITAL
+// ======================
 
 export interface EmergencyHospital {
   id: string;
   name: string;
   address: string;
   phone: string;
-  lat: number;
-  lng: number;
+
+  location: EmergencyLocation;
+
   distanceKm: number;
   etaMinutes: number;
+
   mapsUrl: string;
   directionsUrl: string;
+
   availableBeds?: number;
   icuBeds?: number;
   emergencyReadiness?: number;
-  specialistMatch?: number;
-  trafficMultiplier?: number;
   score?: number;
-  selectedBy?: string;
 }
+
+// ======================
+// 🔹 AMBULANCE
+// ======================
 
 export interface EmergencyAmbulanceAssignment {
   id: string;
   driverName: string;
   phone: string;
   vehicleNumber: string;
-  currentLatitude: number;
-  currentLongitude: number;
-  availability: string;
+
+  location: EmergencyLocation;
+
+  status: AmbulanceStatus;
+
   baseHospitalId: string;
+
   distanceKm: number;
   etaMinutes: number;
+
   wasFallback?: boolean;
 }
+
+// ======================
+// 🔹 DOCTOR ASSIGNMENT
+// ======================
 
 export interface EmergencyDoctorAssignment {
   id: string;
@@ -116,6 +176,10 @@ export interface EmergencyDoctorAssignment {
   specialtyTags?: string[];
 }
 
+// ======================
+// 🔹 MEDICAL SNAPSHOT
+// ======================
+
 export interface EmergencyMedicalSnapshot {
   patientId: string;
   bloodGroup: string;
@@ -125,6 +189,10 @@ export interface EmergencyMedicalSnapshot {
   emergencyContact: string;
   recentRecords: MedicalRecord[];
 }
+
+// ======================
+// 🔹 DISPATCH METRICS
+// ======================
 
 export interface EmergencyDispatchMetrics {
   ambulanceDistanceKm: number;
@@ -136,39 +204,60 @@ export interface EmergencyDispatchMetrics {
   responseWindowSeconds: number;
 }
 
+// ======================
+// 🔹 MAIN EMERGENCY REQUEST
+// ======================
+
 export interface EmergencyRequest {
   id: string;
   roomId: string;
   patientId: string;
-  status: 'pending' | 'accepted' | 'on_the_way' | 'arrived' | 'completed' | 'cancelled';
-  severity?: 'moderate' | 'high' | 'critical';
+
+  status: EmergencyStatus;
+  severity?: EmergencySeverity;
+
   requiredSpecialty?: string;
   symptoms?: string;
+
   location: EmergencyLocation;
+  ambulanceLocation?: EmergencyLocation;
+
   patientLocationMapsUrl: string;
+
   nearestHospital: EmergencyHospital;
+
   ambulanceId?: string;
   assignedAmbulance?: EmergencyAmbulanceAssignment;
-  ambulanceLocation: EmergencyLocation | null;
+
   assignedDoctor?: EmergencyDoctorAssignment;
+
   medicalSnapshot?: EmergencyMedicalSnapshot;
+
   emergencyContact?: string;
   familyContactNotified?: boolean;
+
   patientNote: string;
   handoffMessage: string;
+
   dispatchMetrics?: EmergencyDispatchMetrics;
-  updatedAt: string;
+
   createdAt: string;
+  updatedAt: string;
 }
+
+// ======================
+// 🔹 RESOURCES DASHBOARD
+// ======================
 
 export interface EmergencyResourcePayload {
   ambulances: Array<{
     id: string;
     driverName: string;
-    availability: string;
+    status: AmbulanceStatus;
     location: EmergencyLocation;
     activeEmergencyId: string | null;
   }>;
+
   hospitals: Array<{
     id: string;
     name: string;
@@ -176,6 +265,7 @@ export interface EmergencyResourcePayload {
     icuBeds: number;
     emergencyReadiness: number;
   }>;
+
   doctors: Array<{
     id: string;
     name: string;
@@ -186,13 +276,21 @@ export interface EmergencyResourcePayload {
   }>;
 }
 
+// ======================
+// 🔹 SOCKET SNAPSHOT
+// ======================
+
 export interface EmergencyLiveSnapshot {
   emergency: EmergencyRequest;
 }
 
+// ======================
+// 🔹 NOTIFICATIONS
+// ======================
+
 export interface NotificationItem {
   id: string;
-  recipientRole: UserRole | 'all';
+  recipientRole: UserRole | "all";
   type: NotificationType;
   priority: NotificationPriority;
   title: string;
@@ -202,15 +300,27 @@ export interface NotificationItem {
   createdAt: string;
 }
 
+// ======================
+// 🔹 TRIAGE AI RESULT
+// ======================
+
 export interface SymptomTriageResult {
-  severity: 'low' | 'medium' | 'high';
+  severity: "low" | "medium" | "high";
   confidence: number;
-  careSetting: 'self-care' | 'primary-care' | 'urgent-care' | 'emergency';
+
+  careSetting:
+    | "self-care"
+    | "primary-care"
+    | "urgent-care"
+    | "emergency";
+
   recommendedDepartment: string;
+
   possibleConditions: string[];
   actions: string[];
   homeCare: string[];
   redFlags: string[];
+
   followUp: string;
   summary: string;
 }

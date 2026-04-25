@@ -1,163 +1,205 @@
-import { getEmergencyById, updateEmergencySession } from "../services/emergency.service.js";
+import {
+  getEmergencyById,
+  updateEmergencySession,
+} from "../services/emergency.service.js";
 import { createNotification } from "../services/notification.service.js";
 
-
-/**
-It listens for real-time events like:
-
-emergency:join
-emergency:patient-location
-emergency:ambulance-location
-emergency:hospital-ready
-emergency:complete
-
- */
-
-
+// 🔥 FIXED: BROADCAST + ROOM
 function emitEmergencySnapshot(io, emergency) {
-  io.to(emergency.roomId).emit("emergency:update", {
+  // ✅ 1. Broadcast to ALL (for ambulance discovery)
+  io.emit("emergency:update", {
     emergency,
   });
+
+  // ✅ 2. Also send to room (for joined users like patient/accepted ambulance)
+  if (emergency?.roomId) {
+    io.to(emergency.roomId).emit("emergency:update", {
+      emergency,
+    });
+  }
 }
 
 export function registerEmergencyRealtime(io) {
   io.on("connection", (socket) => {
+    console.log("🟢 Connected:", socket.id);
+
+    // 🔐 BASIC AUTH
+    const auth = socket.handshake?.auth;
+    if (!auth?.userId) {
+      console.warn("❌ Unauthorized socket, disconnecting");
+      socket.disconnect();
+      return;
+    }
+
+    // =========================
+    // 🔥 JOIN ROOM
+    // =========================
     socket.on("emergency:join", async ({ emergencyId, role }) => {
-      if (!emergencyId) {
-        socket.emit("emergency:error", { message: "Emergency id is required." });
-        return;
+      try {
+        if (!emergencyId) {
+          socket.emit("emergency:error", {
+            message: "Emergency id is required.",
+          });
+          return;
+        }
+
+        const emergency = await getEmergencyById(emergencyId);
+        if (!emergency) {
+          socket.emit("emergency:error", {
+            message: "Emergency request not found.",
+          });
+          return;
+        }
+
+        socket.join(emergency.roomId);
+
+        console.log(`🚪 ${role} joined room: ${emergency.roomId}`);
+
+        socket.emit("emergency:snapshot", { emergency });
+        emitEmergencySnapshot(io, emergency);
+      } catch (err) {
+        console.error("JOIN ERROR:", err);
+        socket.emit("emergency:error", {
+          message: "Failed to join emergency room",
+        });
       }
-
-      const emergency = await getEmergencyById(emergencyId);
-      if (!emergency) {
-        socket.emit("emergency:error", { message: "Emergency request not found." });
-        return;
-      }
-
-      socket.join(emergency.roomId);
-
-      if (role === "ambulance" && ["pending", "accepted"].includes(emergency.status)) {
-        const updatedEmergency = await updateEmergencySession(emergencyId, {
-          status: "on_the_way",
-        });
-
-        createNotification({
-          recipientRole: "patient",
-          type: "emergency",
-          priority: "high",
-          title: "Ambulance accepted the request",
-          description: `${(updatedEmergency ?? emergency).assignedAmbulance.driverName} is moving toward your live location now.`,
-          link: "/emergency",
-        });
-
-        createNotification({
-          recipientRole: "hospital",
-          type: "emergency",
-          priority: "high",
-          title: "Ambulance is en route",
-          description: `Ambulance ${(updatedEmergency ?? emergency).assignedAmbulance.id} is inbound with ETA ${(updatedEmergency ?? emergency).dispatchMetrics?.hospitalEtaMinutes || 10} minutes.`,
-          link: "/emergency",
-        });
-
-        createNotification({
-          recipientRole: "doctor",
-          type: "emergency",
-          priority: "high",
-          title: "Doctor prep started",
-          description: `${(updatedEmergency ?? emergency).assignedDoctor.name}, please prepare for a ${(updatedEmergency ?? emergency).severity} emergency intake.`,
-          link: "/emergency",
-        });
-
-        socket.emit("emergency:snapshot", { emergency: updatedEmergency ?? emergency });
-        emitEmergencySnapshot(io, updatedEmergency ?? emergency);
-        return;
-      }
-
-      socket.emit("emergency:snapshot", { emergency });
-      emitEmergencySnapshot(io, emergency);
     });
 
+    // =========================
+    // 🚑 ACCEPT EMERGENCY
+    // =========================
+    socket.on("emergency:accept", async ({ emergencyId, ambulanceId }) => {
+      try {
+        if (!emergencyId || !ambulanceId) return;
+
+        const emergency = await updateEmergencySession(emergencyId, {
+          status: "accepted",
+          ambulanceId,
+        });
+
+        if (emergency) {
+          console.log("🚑 Emergency accepted:", emergency.id);
+
+          createNotification({
+            recipientRole: "patient",
+            type: "emergency",
+            priority: "high",
+            title: "Ambulance accepted",
+            description: "Help is on the way 🚑",
+            link: "/emergency",
+          });
+
+          emitEmergencySnapshot(io, emergency);
+        }
+      } catch (err) {
+        console.error("ACCEPT ERROR:", err);
+        socket.emit("emergency:error", {
+          message: "Failed to accept emergency",
+        });
+      }
+    });
+
+    // =========================
+    // 📍 PATIENT LOCATION
+    // =========================
     socket.on("emergency:patient-location", async ({ emergencyId, location }) => {
-      if (!emergencyId || !location) {
-        return;
-      }
+      try {
+        if (!emergencyId || !location) return;
 
-      const emergency = await updateEmergencySession(emergencyId, {
-        location,
-      });
+        const emergency = await updateEmergencySession(emergencyId, {
+          location,
+        });
 
-      if (emergency) {
-        emitEmergencySnapshot(io, emergency);
+        if (emergency) {
+          emitEmergencySnapshot(io, emergency);
+        }
+      } catch (err) {
+        console.error("PATIENT LOCATION ERROR:", err);
       }
     });
 
+    // =========================
+    // 🚑 AMBULANCE LOCATION
+    // =========================
     socket.on("emergency:ambulance-location", async ({ emergencyId, location }) => {
-      if (!emergencyId || !location) {
-        return;
-      }
+      try {
+        if (!emergencyId || !location) return;
 
-      const emergency = await updateEmergencySession(emergencyId, {
-        ambulanceLocation: location,
-      });
+        const emergency = await updateEmergencySession(emergencyId, {
+          ambulanceLocation: location,
+        });
 
-      if (emergency) {
-        emitEmergencySnapshot(io, emergency);
+        if (emergency) {
+          emitEmergencySnapshot(io, emergency);
+        }
+      } catch (err) {
+        console.error("AMBULANCE LOCATION ERROR:", err);
       }
     });
 
+    // =========================
+    // 🏥 HOSPITAL READY
+    // =========================
     socket.on("emergency:hospital-ready", async ({ emergencyId }) => {
-      if (!emergencyId) {
-        return;
-      }
+      try {
+        if (!emergencyId) return;
 
-      const emergency = await updateEmergencySession(emergencyId, {
-        status: "arrived",
-      });
-
-      if (emergency) {
-        createNotification({
-          recipientRole: "patient",
-          type: "emergency",
-          priority: "high",
-          title: "Hospital is ready for handoff",
-          description: `${emergency.nearestHospital.name} confirmed bed and doctor availability.`,
-          link: "/emergency",
+        const emergency = await updateEmergencySession(emergencyId, {
+          status: "arrived",
         });
 
-        emitEmergencySnapshot(io, emergency);
+        if (emergency) {
+          createNotification({
+            recipientRole: "patient",
+            type: "emergency",
+            priority: "high",
+            title: "Hospital is ready",
+            description: `${emergency.nearestHospital?.name} is prepared for your arrival.`,
+            link: "/emergency",
+          });
+
+          emitEmergencySnapshot(io, emergency);
+        }
+      } catch (err) {
+        console.error("HOSPITAL READY ERROR:", err);
       }
     });
 
+    // =========================
+    // ❌ COMPLETE
+    // =========================
     socket.on("emergency:complete", async ({ emergencyId }) => {
-      if (!emergencyId) {
-        return;
-      }
+      try {
+        if (!emergencyId) return;
 
-      const emergency = await updateEmergencySession(emergencyId, {
-        status: "completed",
-      });
-
-      if (emergency) {
-        createNotification({
-          recipientRole: "ambulance",
-          type: "emergency",
-          priority: "low",
-          title: "Case completed",
-          description: `${emergency.id.slice(0, 8).toUpperCase()} closed. Ambulance is back to available state.`,
-          link: "/emergency",
+        const emergency = await updateEmergencySession(emergencyId, {
+          status: "completed",
         });
 
-        createNotification({
-          recipientRole: "doctor",
-          type: "emergency",
-          priority: "low",
-          title: "Emergency case closed",
-          description: `${emergency.id.slice(0, 8).toUpperCase()} completed and archived.`,
-          link: "/emergency",
-        });
+        if (emergency) {
+          createNotification({
+            recipientRole: "ambulance",
+            type: "emergency",
+            priority: "low",
+            title: "Case completed",
+            description: `${emergency.id
+              .slice(0, 8)
+              .toUpperCase()} closed.`,
+            link: "/emergency",
+          });
 
-        emitEmergencySnapshot(io, emergency);
+          emitEmergencySnapshot(io, emergency);
+        }
+      } catch (err) {
+        console.error("COMPLETE ERROR:", err);
       }
+    });
+
+    // =========================
+    // 🔌 DISCONNECT
+    // =========================
+    socket.on("disconnect", () => {
+      console.log("🔴 Disconnected:", socket.id);
     });
   });
 }

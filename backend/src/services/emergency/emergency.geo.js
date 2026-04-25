@@ -11,21 +11,32 @@ export function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+// =========================
+// 🌍 DISTANCE (IMPROVED)
+// =========================
 export function getDistanceKm(origin, destination) {
+  if (!origin || !destination) return 0;
+
   const earthRadiusKm = 6371;
+
   const latitudeDelta = toRadians(destination.lat - origin.lat);
   const longitudeDelta = toRadians(destination.lng - origin.lng);
+
   const startLatitude = toRadians(origin.lat);
   const endLatitude = toRadians(destination.lat);
 
   const a =
-    Math.sin(latitudeDelta / 2) * Math.sin(latitudeDelta / 2) +
-    Math.cos(startLatitude) * Math.cos(endLatitude) *
-    Math.sin(longitudeDelta / 2) * Math.sin(longitudeDelta / 2);
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(startLatitude) *
+      Math.cos(endLatitude) *
+      Math.sin(longitudeDelta / 2) ** 2;
 
   return 2 * earthRadiusKm * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+// =========================
+// 🗺️ MAP LINKS
+// =========================
 export function buildOSMMapUrlForLocation(location, zoom = 16) {
   return `https://www.openstreetmap.org/?mlat=${location.lat}&mlon=${location.lng}#map=${zoom}/${location.lat}/${location.lng}`;
 }
@@ -43,22 +54,30 @@ export function buildPatientLocationMapsUrl(location) {
   return buildOSMMapUrlForLocation(location, 18);
 }
 
+// =========================
+// ⏱️ ETA CALCULATION
+// =========================
 export function estimateTravelMinutes(distanceKm, trafficMultiplier = 1) {
-  return Math.max(4, Math.round(distanceKm * 2.6 * trafficMultiplier) + 3);
+  return Math.max(4, Math.round(distanceKm * 2.5 * trafficMultiplier) + 2);
 }
 
+// =========================
+// 🚦 TRAFFIC LOGIC
+// =========================
 export function getTrafficMultiplier(location) {
   const hour = new Date().getHours();
-  const rushHour = (hour >= 8 && hour <= 11) || (hour >= 17 && hour <= 21);
-  const cityCenterBias = Math.abs(location.lat - 28.6139) < 0.12 && Math.abs(location.lng - 77.209) < 0.14;
 
-  if (rushHour && cityCenterBias) {
-    return 1.45;
-  }
+  const rushHour =
+    (hour >= 8 && hour <= 11) ||
+    (hour >= 17 && hour <= 21);
 
-  if (rushHour) {
-    return 1.25;
-  }
+  // Delhi bias (you can expand later)
+  const cityCenterBias =
+    Math.abs(location.lat - 28.6139) < 0.12 &&
+    Math.abs(location.lng - 77.209) < 0.14;
+
+  if (rushHour && cityCenterBias) return 1.45;
+  if (rushHour) return 1.25;
 
   return 1;
 }
