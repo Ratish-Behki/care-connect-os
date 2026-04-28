@@ -125,7 +125,9 @@ export interface EmergencyHospital {
   address: string;
   phone: string;
 
-  location: EmergencyLocation;
+  location?: EmergencyLocation;
+  lat?: number;
+  lng?: number;
 
   distanceKm: number;
   etaMinutes: number;
@@ -137,6 +139,7 @@ export interface EmergencyHospital {
   icuBeds?: number;
   emergencyReadiness?: number;
   score?: number;
+  sizeScore?: number;
 }
 
 // ======================
@@ -225,6 +228,7 @@ export interface EmergencyRequest {
   patientLocationMapsUrl: string;
 
   nearestHospital: EmergencyHospital;
+  nearbyHospitals?: EmergencyHospital[];
 
   ambulanceId?: string;
   assignedAmbulance?: EmergencyAmbulanceAssignment;
