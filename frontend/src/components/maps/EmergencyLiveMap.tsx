@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { MapPin, Navigation } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { EmergencyHospital, EmergencyLocation } from "@/types";
@@ -8,10 +8,12 @@ import {
   MapContainer,
   TileLayer,
   CircleMarker,
-  Polyline,
   useMap,
   Popup,
 } from "react-leaflet";
+import L from "leaflet";
+import "leaflet-routing-machine";
+import "leaflet-routing-machine/dist/leaflet-routing-machine.css";
 
 // =======================
 // 🔹 HELPERS
@@ -22,41 +24,48 @@ function toLatLng(location: EmergencyLocation | null) {
 }
 
 // =======================
-// 🔹 AUTO FIT BOUNDS
+// 🔹 FOLLOW PATIENT
 // =======================
-function FitBounds({ points }: { points: Array<[number, number]> }) {
-  const map = useMap();
-
-  useEffect(() => {
-    const valid = points.filter(Boolean);
-    if (valid.length === 0) return;
-
-    if (valid.length === 1) {
-      map.setView(valid[0], 15);
-      return;
-    }
-
-    map.fitBounds(valid as any, { padding: [60, 60] });
-  }, [map, points]);
-
-  return null;
-}
-
-// =======================
-// 🔹 FOLLOW AMBULANCE
-// =======================
-function FollowAmbulance({
+function FollowPatient({
   position,
 }: {
   position: [number, number] | null;
 }) {
   const map = useMap();
+  const [hasCentered, setHasCentered] = useState(false);
 
   useEffect(() => {
-    if (position) {
-      map.panTo(position);
+    if (position && !hasCentered) {
+      map.setView(position, 14);
+      setHasCentered(true);
     }
-  }, [position]);
+  }, [map, position, hasCentered]);
+
+  return null;
+}
+
+function Routing({
+  start,
+  end,
+}: {
+  start: { lat: number; lng: number } | null;
+  end: { lat: number; lng: number } | null;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!start || !end) return;
+
+    const routingControl = L.Routing.control({
+      waypoints: [L.latLng(start.lat, start.lng), L.latLng(end.lat, end.lng)],
+      routeWhileDragging: false,
+      show: false,
+      addWaypoints: false,
+      createMarker: () => null,
+    }).addTo(map);
+
+    return () => map.removeControl(routingControl);
+  }, [map, start, end]);
 
   return null;
 }
@@ -80,23 +89,26 @@ const EmergencyLiveMap = ({
   title = "Live tracking",
 }: EmergencyLiveMapProps) => {
   const patientPoint = toLatLng(patientLocation);
-  const ambulancePoint = toLatLng(ambulanceLocation);
-  const hospitalPoint = hospital ? toLatLng(hospital.location) : null;
+  const selectedHospital = hospital;
+  const hospitalPoint = useMemo(() => {
+    if (!selectedHospital) return null;
+
+    if (
+      Number.isFinite(selectedHospital.lat) &&
+      Number.isFinite(selectedHospital.lng)
+    ) {
+      return {
+        lat: Number(selectedHospital.lat),
+        lng: Number(selectedHospital.lng),
+      };
+    }
+
+    return toLatLng(selectedHospital.location ?? null);
+  }, [selectedHospital]);
 
   const mapCenter = useMemo(() => {
-    return (
-      patientPoint ||
-      ambulancePoint ||
-      hospitalPoint ||
-      null
-    );
-  }, [patientPoint, ambulancePoint, hospitalPoint]);
-
-  const points: Array<[number, number]> = [];
-
-  if (patientPoint) points.push([patientPoint.lat, patientPoint.lng]);
-  if (ambulancePoint) points.push([ambulancePoint.lat, ambulancePoint.lng]);
-  if (hospitalPoint) points.push([hospitalPoint.lat, hospitalPoint.lng]);
+    return patientPoint || hospitalPoint || null;
+  }, [patientPoint, hospitalPoint]);
 
   const openPatientLocation = () => {
     if (patientLocationMapsUrl) {
@@ -106,7 +118,6 @@ const EmergencyLiveMap = ({
 
   return (
     <div className="glass-card p-5 space-y-4">
-
       {/* HEADER */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
@@ -126,40 +137,9 @@ const EmergencyLiveMap = ({
         </Button>
       </div>
 
-      {/* STATUS CARDS */}
-      <div className="grid md:grid-cols-3 gap-3 text-xs">
-        <div className="p-3 border rounded-xl">
-          <p className="font-medium">Patient</p>
-          <p>
-            {patientLocation
-              ? `${patientLocation.lat.toFixed(5)}, ${patientLocation.lng.toFixed(5)}`
-              : "Waiting..."}
-          </p>
-        </div>
-
-        <div className="p-3 border rounded-xl">
-          <p className="font-medium">Ambulance</p>
-          <p>
-            {ambulanceLocation
-              ? `${ambulanceLocation.lat.toFixed(5)}, ${ambulanceLocation.lng.toFixed(5)}`
-              : "Waiting..."}
-          </p>
-        </div>
-
-        <div className="p-3 border rounded-xl">
-          <p className="font-medium">Hospital</p>
-          <p>
-            {hospital
-              ? `${hospital.name}`
-              : "Pending"}
-          </p>
-        </div>
-      </div>
-
       {/* MAP */}
       {mapCenter ? (
         <div className="h-[380px] rounded-xl overflow-hidden border">
-
           <MapContainer
             center={[mapCenter.lat, mapCenter.lng]}
             zoom={13}
@@ -178,17 +158,6 @@ const EmergencyLiveMap = ({
               </CircleMarker>
             )}
 
-            {/* 🚑 Ambulance */}
-            {ambulancePoint && (
-              <CircleMarker
-                center={[ambulancePoint.lat, ambulancePoint.lng]}
-                radius={8}
-                pathOptions={{ color: "#dc2626", fillOpacity: 0.9 }}
-              >
-                <Popup>🚑 Ambulance</Popup>
-              </CircleMarker>
-            )}
-
             {/* 🏥 Hospital */}
             {hospitalPoint && (
               <CircleMarker
@@ -200,28 +169,16 @@ const EmergencyLiveMap = ({
               </CircleMarker>
             )}
 
-            {/* 🔴 Route Line */}
-            {patientPoint && ambulancePoint && (
-              <Polyline
-                positions={[
-                  [ambulancePoint.lat, ambulancePoint.lng],
-                  [patientPoint.lat, patientPoint.lng],
-                ]}
-                pathOptions={{ color: "#dc2626", weight: 4 }}
-              />
-            )}
+            <Routing start={patientPoint} end={hospitalPoint} />
 
-            {/* 📍 Auto fit */}
-            <FitBounds points={points} />
-
-            {/* 🚑 Follow ambulance */}
-            <FollowAmbulance
+            <FollowPatient
               position={
-                ambulancePoint
-                  ? [ambulancePoint.lat, ambulancePoint.lng]
+                patientPoint
+                  ? [patientPoint.lat, patientPoint.lng]
                   : null
               }
             />
+
           </MapContainer>
         </div>
       ) : (

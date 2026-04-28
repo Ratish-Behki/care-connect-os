@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import EmergencyLiveMap from "@/components/maps/EmergencyLiveMap";
+import EmergencyLiveMap from "../components/maps/EmergencyLiveMap";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -19,7 +19,11 @@ import { useEmergencySocket } from "@/hooks/useEmergencySocket"; // ✅ NEW
 import { useAuthStore } from "@/store/authStore";
 import { useToast } from "@/hooks/use-toast";
 
-import type { EmergencyLocation, EmergencyRequest } from "@/types";
+import type {
+  EmergencyHospital,
+  EmergencyLocation,
+  EmergencyRequest,
+} from "@/types";
 
 // =========================
 // 📍 LOCATION HELPER
@@ -54,6 +58,8 @@ const EmergencyPage = () => {
   const [socketStatus, setSocketStatus] = useState("Disconnected");
   const [activeEmergency, setActiveEmergency] =
     useState<EmergencyRequest | null>(null);
+  const [selectedHospital, setSelectedHospital] =
+    useState<EmergencyHospital | null>(null);
   const [isRequesting, setIsRequesting] = useState(false);
   const [isSharingLocation, setIsSharingLocation] = useState(false);
   const [symptoms, setSymptoms] = useState("");
@@ -223,7 +229,26 @@ const EmergencyPage = () => {
 
   const ambulance = activeEmergency?.assignedAmbulance;
   const hospital = activeEmergency?.nearestHospital;
+  const nearbyHospitals = activeEmergency?.nearbyHospitals ??
+    (hospital ? [hospital] : []);
   const doctor = activeEmergency?.assignedDoctor;
+
+  useEffect(() => {
+    if (!hospital) {
+      setSelectedHospital(null);
+      return;
+    }
+
+    setSelectedHospital((current) => {
+      if (!current) return hospital;
+
+      const stillAvailable = nearbyHospitals.find(
+        (item) => item.id === current.id
+      );
+
+      return stillAvailable || hospital;
+    });
+  }, [hospital, nearbyHospitals]);
 
   return (
     <DashboardLayout>
@@ -238,7 +263,7 @@ const EmergencyPage = () => {
             <Radio /> {socketStatus}
           </div>
           <div>
-            <Hospital /> {hospital?.name || "Waiting"}
+            <Hospital /> {selectedHospital?.name || hospital?.name || "Waiting"}
           </div>
         </div>
 
@@ -269,7 +294,9 @@ const EmergencyPage = () => {
 
             <h2 className="text-xl font-bold">🚑 Emergency Active</h2>
 
-            <p>ETA: {hospital?.etaMinutes} min</p>
+            <p>
+              ETA: {selectedHospital?.etaMinutes || hospital?.etaMinutes || "--"} min
+            </p>
 
             <div>
               <Ambulance />
@@ -281,10 +308,40 @@ const EmergencyPage = () => {
               {doctor?.name || "Doctor not assigned"}
             </div>
 
+            {nearbyHospitals.length > 0 && (
+              <div className="p-3 border rounded-xl space-y-2">
+                <p className="font-semibold text-sm">🏥 Nearby hospitals</p>
+
+                <div className="grid gap-2">
+                  {nearbyHospitals.map((item) => {
+                    const isSelected = selectedHospital?.id === item.id;
+
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setSelectedHospital(item)}
+                        className={`text-left p-2 rounded-lg border text-sm transition ${
+                          isSelected
+                            ? "bg-green-600 text-white border-green-600"
+                            : "hover:bg-muted"
+                        }`}
+                      >
+                        <p className="font-medium">{item.name}</p>
+                        <p className="text-xs opacity-80">
+                          {(item.distanceKm ?? 0).toFixed(1)} km • {item.etaMinutes ?? "--"} min
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             <EmergencyLiveMap
               patientLocation={activeEmergency.location}
               ambulanceLocation={activeEmergency.ambulanceLocation}
-              hospital={hospital}
+              hospital={selectedHospital || hospital}
             />
 
             <div className="flex gap-3">

@@ -2,7 +2,6 @@ import { createNotification } from "../notification.service.js";
 import {
   createEmergencyDispatch,
   createEmergencyRoomId,
-  getNearestHospital,
 } from "./emergency.dispatch.js";
 import { getEmergencyResources } from "./emergency.resources.js";
 import {
@@ -135,7 +134,6 @@ export async function createEmergencyCase({
 export {
   createEmergencyDispatch,
   createEmergencyRoomId,
-  getNearestHospital,
   getEmergencyResources,
   getEmergencyById,
   getActiveEmergencies,

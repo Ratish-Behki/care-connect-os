@@ -213,6 +213,7 @@ model EmergencyRequest {
   location             Json
   patientLocationMapsUrl String
   nearestHospital      Json
+  nearbyHospitals      Json?
   ambulanceId          String?
   assignedAmbulance    Json?
   ambulanceLocation    Json?
