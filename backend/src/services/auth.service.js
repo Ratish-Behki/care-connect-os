@@ -59,19 +59,21 @@ export async function registerUser(input) {
     },
   });
 
+  let doctor = null;
   if (role === "doctor") {
-    await prisma.doctor.create({
+    doctor = await prisma.doctor.create({
       data: {
         id: user.id,
         name: user.name,
-        specialization,
-        experience: Number.isFinite(Number(experience)) ? Number(experience) : 0,
-        rating: Number.isFinite(Number(rating)) ? Number(rating) : 0,
-        avatar: user.avatar ?? "",
+        specialization: specialization || null,
+        experience: Number.isFinite(Number(experience)) ? Number(experience) : null,
+        rating: 0,
+        avatar: user.avatar ?? null,
         available: typeof available === "boolean" ? available : true,
-        department,
+        department: department || null,
         fee: Number.isFinite(Number(fee)) ? Number(fee) : 0,
         nextAvailable: new Date().toISOString(),
+        profileComplete: false,
       },
     });
   }
@@ -84,13 +86,19 @@ export async function registerUser(input) {
     priority: "medium",
     title: `Account created for ${name}`,
     description: "Your smart hospital workspace is ready.",
-    link: "/dashboard",
+    link: role === "doctor" ? "/doctor-profile-setup" : "/dashboard",
   });
 
-  return {
+  const response = {
     user: toSafeUser(user),
     token,
   };
+
+  if (role === "doctor") {
+    response.profileComplete = false;
+  }
+
+  return response;
 }
 
 export async function loginUser(input) {
@@ -124,8 +132,17 @@ export async function loginUser(input) {
     link: "/dashboard",
   });
 
-  return {
+  const response = {
     user: toSafeUser(user),
     token,
   };
+
+  if (role === "doctor") {
+    const doctor = await prisma.doctor.findUnique({
+      where: { id: user.id },
+    });
+    response.profileComplete = doctor?.profileComplete ?? false;
+  }
+
+  return response;
 }
