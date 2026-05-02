@@ -85,8 +85,8 @@ export const api = {
     request('/api/notifications/read-all', {
       method: 'PATCH',
     }),
-  getProfile: (): ApiResponse<{ user: User; health: PatientProfile }> => request('/api/profile'),
-  updateProfile: (input: { user?: Partial<User>; health?: Partial<PatientProfile> }): ApiResponse<{ user: User; health: PatientProfile }> =>
+  getProfile: (): ApiResponse<any> => request('/api/profile'),
+  updateProfile: (input: any): ApiResponse<{ user: User; profile?: any }> =>
     request('/api/profile', {
       method: 'PUT',
       body: JSON.stringify(input),

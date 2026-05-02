@@ -113,17 +113,18 @@ model PatientProfile {
 model Doctor {
   id               String   @id
   name             String
-  specialization   String
-  experience       Int
-  rating           Float
-  avatar           String
-  available        Boolean
-  department       String
-  fee              Float
-  nextAvailable    String
+  specialization   String?
+  experience       Int?
+  rating           Float    @default(0)
+  avatar           String?
+  available        Boolean  @default(true)
+  department       String?
+  fee              Float    @default(0)
+  nextAvailable    String?
   hospitalId       String?
   activeEmergencyId String?
   lastUpdatedAt    DateTime?
+  profileComplete  Boolean  @default(false)
 
   hospital Hospital? @relation(fields: [hospitalId], references: [id])
   appointments Appointment[]

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { User, Heart, AlertCircle, Pill, Phone, Edit } from 'lucide-react';
+import { User, Heart, AlertCircle, Pill, Phone, Edit, Briefcase, Award, Building2, DollarSign } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,7 @@ import { useAuthStore } from '@/store/authStore';
 import { profileService } from '@/services/profileService';
 import { useToast } from '@/hooks/use-toast';
 
-const emptyForm = {
+const emptyPatientForm = {
   name: '',
   email: '',
   phone: '',
@@ -20,9 +20,48 @@ const emptyForm = {
   diseases: '',
   medications: '',
   emergencyContact: '',
+  dateOfBirth: '',
 };
 
+const emptyDoctorForm = {
+  name: '',
+  email: '',
+  specialization: '',
+  experience: '',
+  department: '',
+  fee: '',
+  available: true,
+};
+
+const specializations = [
+  'General Practice',
+  'Cardiology',
+  'Neurology',
+  'Orthopedics',
+  'Pediatrics',
+  'Psychiatry',
+  'Dermatology',
+  'ENT',
+  'Ophthalmology',
+  'Gynecology',
+  'Urology',
+  'Gastroenterology',
+  'Pulmonology',
+];
+
+const departments = [
+  'General',
+  'Cardiology',
+  'Neurology',
+  'Orthopedics',
+  'Pediatrics',
+  'Emergency',
+  'ICU',
+  'Surgery',
+];
+
 const ProfilePage = () => {
+  const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -31,167 +70,490 @@ const ProfilePage = () => {
     queryFn: profileService.getProfile,
   });
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  type DoctorForm = typeof emptyDoctorForm;
+  type PatientForm = typeof emptyPatientForm;
+  const [doctorForm, setDoctorForm] = useState<DoctorForm>(emptyDoctorForm);
+  const [patientForm, setPatientForm] = useState<PatientForm>(emptyPatientForm);
+  const isDoctor = user?.role === 'doctor';
 
+  const getForm = (key: string) => (isDoctor ? (doctorForm as any)[key] : (patientForm as any)[key]);
+  const setFormValue = (key: string, value: any) => {
+    if (isDoctor) setDoctorForm((d) => ({ ...d, [key]: value }));
+    else setPatientForm((p) => ({ ...p, [key]: value }));
+  };
+  const [completionPercentage, setCompletionPercentage] = useState(0);
+
+  // Calculate profile completion
   useEffect(() => {
-    if (!profile) {
-      return;
+    if (!profile) return;
+
+    let completed = 0;
+    let total = 0;
+
+    if (user?.role === 'doctor') {
+      const doctorFields = ['specialization', 'experience', 'department'];
+      const basicFields = ['name', 'email'];
+      
+      doctorFields.forEach(field => {
+        total++;
+        if (profile.profile?.[field]) completed++;
+      });
+      basicFields.forEach(field => {
+        total++;
+        if (profile.user?.[field]) completed++;
+      });
+    } else {
+      const patientFields = ['bloodGroup', 'emergencyContact', 'phone'];
+      const basicFields = ['name', 'email'];
+      
+      patientFields.forEach(field => {
+        total++;
+        if (profile.profile?.[field]) completed++;
+      });
+      basicFields.forEach(field => {
+        total++;
+        if (profile.user?.[field]) completed++;
+      });
     }
 
-    setForm({
-      name: profile.user.name,
-      email: profile.user.email,
-      phone: profile.health.phone,
-      bloodGroup: profile.health.bloodGroup,
-      allergies: profile.health.allergies.join(', '),
-      diseases: profile.health.diseases.join(', '),
-      medications: profile.health.medications.join(', '),
-      emergencyContact: profile.health.emergencyContact,
-    });
-  }, [profile, open]);
+    if (total > 0) {
+      setCompletionPercentage(Math.round((completed / total) * 100));
+    }
+  }, [profile, user?.role]);
 
-  const updateMutation = useMutation({
-    mutationFn: profileService.updateProfile,
-    onSuccess: ({ user }) => {
-      setUser(user);
+  // Pre-fill form
+  useEffect(() => {
+    if (!profile) return;
+
+    if (user?.role === 'doctor') {
+      setDoctorForm({
+        name: profile.user?.name || '',
+        email: profile.user?.email || '',
+        specialization: profile.profile?.specialization || '',
+        experience: profile.profile?.experience?.toString() || '',
+        department: profile.profile?.department || '',
+        fee: profile.profile?.fee?.toString() || '',
+        available: profile.profile?.available ?? true,
+      });
+    } else {
+      setPatientForm({
+        name: profile.user?.name || '',
+        email: profile.user?.email || '',
+        phone: profile.profile?.phone || '',
+        bloodGroup: profile.profile?.bloodGroup || '',
+        allergies: Array.isArray(profile.profile?.allergies)
+          ? profile.profile.allergies.join(', ')
+          : '',
+        diseases: Array.isArray(profile.profile?.diseases)
+          ? profile.profile.diseases.join(', ')
+          : '',
+        medications: Array.isArray(profile.profile?.medications)
+          ? profile.profile.medications.join(', ')
+          : '',
+        emergencyContact: profile.profile?.emergencyContact || '',
+        dateOfBirth: profile.profile?.dateOfBirth || '',
+      });
+    }
+  }, [profile, open, user?.role]);
+
+  const updateMutation = useMutation<any, Error, any>({
+    mutationFn: (data: any) => profileService.updateProfile(data),
+    onSuccess: ({ user: updatedUser }) => {
+      setUser(updatedUser);
       queryClient.invalidateQueries({ queryKey: ['profile'] });
       setOpen(false);
-      toast({ title: 'Profile updated', description: 'Your profile changes were saved.' });
+      toast({ 
+        title: 'Profile updated', 
+        description: 'Your changes have been saved successfully.' 
+      });
     },
     onError: (error: Error) => {
-      toast({ title: 'Update failed', description: error.message, variant: 'destructive' });
+      toast({ 
+        title: 'Update failed', 
+        description: error.message, 
+        variant: 'destructive' 
+      });
     },
   });
 
-  const handleSave = () => {
+  const handleSaveDoctorProfile = () => {
+    // Validation
+    if (!doctorForm.specialization?.trim()) {
+      toast({ title: 'Validation error', description: 'Specialization is required', variant: 'destructive' });
+      return;
+    }
+    if (!doctorForm.experience?.trim()) {
+      toast({ title: 'Validation error', description: 'Experience is required', variant: 'destructive' });
+      return;
+    }
+    if (!doctorForm.department?.trim()) {
+      toast({ title: 'Validation error', description: 'Department is required', variant: 'destructive' });
+      return;
+    }
+
     updateMutation.mutate({
       user: {
-        name: form.name,
-        email: form.email,
+        name: doctorForm.name,
+        email: doctorForm.email,
       },
-      health: {
-        bloodGroup: form.bloodGroup,
-        allergies: form.allergies.split(',').map((item) => item.trim()).filter(Boolean),
-        diseases: form.diseases.split(',').map((item) => item.trim()).filter(Boolean),
-        medications: form.medications.split(',').map((item) => item.trim()).filter(Boolean),
-        emergencyContact: form.emergencyContact,
-        phone: form.phone,
+      doctor: {
+        specialization: doctorForm.specialization,
+        experience: parseInt(doctorForm.experience) || 0,
+        department: doctorForm.department,
+        fee: parseFloat(doctorForm.fee) || 0,
+        available: doctorForm.available,
       },
     });
   };
 
-  const infoSections = [
-    { icon: Heart, label: 'Blood Group', value: profile?.health.bloodGroup ?? '' },
-    { icon: AlertCircle, label: 'Allergies', value: profile?.health.allergies.join(', ') ?? '' },
-    { icon: Pill, label: 'Medications', value: profile?.health.medications.join(', ') ?? '' },
-    { icon: Phone, label: 'Emergency Contact', value: profile?.health.emergencyContact ?? '' },
-  ];
+  const handleSavePatientProfile = () => {
+    updateMutation.mutate({
+      user: {
+        name: patientForm.name,
+        email: patientForm.email,
+      },
+      profile: {
+        bloodGroup: patientForm.bloodGroup,
+        allergies: patientForm.allergies.split(',').map((item) => item.trim()).filter(Boolean),
+        diseases: patientForm.diseases.split(',').map((item) => item.trim()).filter(Boolean),
+        medications: patientForm.medications.split(',').map((item) => item.trim()).filter(Boolean),
+        emergencyContact: patientForm.emergencyContact,
+        phone: patientForm.phone,
+        dateOfBirth: patientForm.dateOfBirth,
+      },
+    });
+  };
+
+  const CompletionIndicator = () => (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-foreground">Profile Completion</span>
+        <span className="text-sm font-bold text-primary">{completionPercentage}%</span>
+      </div>
+      <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+        <motion.div
+          initial={{ width: 0 }}
+          animate={{ width: `${completionPercentage}%` }}
+          transition={{ duration: 0.5 }}
+          className="h-full gradient-primary"
+        />
+      </div>
+    </div>
+  );
+
+  if (isLoading) {
+    return (
+      <DashboardLayout>
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">Loading profile...</div>
+        </div>
+      </DashboardLayout>
+    );
+  }
 
   return (
     <DashboardLayout>
-      <div className="max-w-3xl mx-auto space-y-6">
+      <div className="max-w-4xl mx-auto space-y-6">
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="font-display text-2xl font-bold text-foreground">My Profile</h1>
-            <p className="text-sm text-muted-foreground mt-1">Manage your health information</p>
+            <h1 className="font-display text-3xl font-bold text-foreground">My Profile</h1>
+            <p className="text-sm text-muted-foreground mt-1">
+              {user?.role === 'doctor' ? 'Manage your professional information' : 'Manage your health information'}
+            </p>
           </div>
-          <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
-            <Edit className="w-4 h-4 mr-2" /> Edit
+          <Button variant="outline" onClick={() => setOpen(true)}>
+            <Edit className="w-4 h-4 mr-2" /> Edit Profile
           </Button>
         </div>
 
-        {/* Avatar card */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="glass-card p-6">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full gradient-primary flex items-center justify-center text-2xl font-bold text-primary-foreground">
-              {profile?.user.name?.charAt(0)}
-            </div>
-            <div>
-              <h2 className="text-lg font-semibold text-foreground">{profile?.user.name}</h2>
-              <p className="text-sm text-muted-foreground">{profile?.user.email}</p>
-              <p className="text-xs text-muted-foreground mt-1">DOB: {profile?.health.dateOfBirth} • {profile?.health.phone}</p>
-            </div>
-          </div>
+        {/* Profile Completion */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card p-6"
+        >
+          <CompletionIndicator />
         </motion.div>
 
-        {/* Health Info */}
-        <div className="grid gap-4 md:grid-cols-2">
-          {infoSections.map((s, i) => (
-            <motion.div
-              key={s.label}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.05 }}
-              className="glass-card p-5"
-            >
-              <div className="flex items-center gap-3 mb-2">
-                <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
-                  <s.icon className="w-4 h-4 text-primary" />
+        {/* Profile Info */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-card p-6 space-y-6"
+        >
+          <div>
+            <h2 className="text-lg font-semibold text-foreground mb-4">Basic Information</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex items-start gap-3">
+                <User className="w-5 h-5 text-primary mt-1" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Name</p>
+                  <p className="text-foreground font-medium">{profile?.user?.name || '—'}</p>
                 </div>
-                <span className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{s.label}</span>
               </div>
-              <p className="text-sm font-medium text-foreground">{s.value}</p>
-            </motion.div>
-          ))}
-        </div>
-
-        {/* Diseases */}
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }} className="glass-card p-5">
-          <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide mb-3">Known Conditions</h3>
-          <div className="flex flex-wrap gap-2">
-            {profile?.health.diseases.map((d) => (
-              <span key={d} className="px-3 py-1.5 rounded-full bg-warning/10 text-warning text-xs font-medium">{d}</span>
-            ))}
+              <div className="flex items-start gap-3">
+                <User className="w-5 h-5 text-primary mt-1" />
+                <div>
+                  <p className="text-xs text-muted-foreground">Email</p>
+                  <p className="text-foreground font-medium">{profile?.user?.email || '—'}</p>
+                </div>
+              </div>
+            </div>
           </div>
+
+          {/* Doctor-specific fields */}
+          {user?.role === 'doctor' && (
+            <div>
+              <h2 className="text-lg font-semibold text-foreground mb-4">Professional Information</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-start gap-3">
+                  <Briefcase className="w-5 h-5 text-primary mt-1" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Specialization</p>
+                    <p className="text-foreground font-medium">{profile?.profile?.specialization || '—'}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Award className="w-5 h-5 text-primary mt-1" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Experience</p>
+                    <p className="text-foreground font-medium">{profile?.profile?.experience ? `${profile.profile.experience} years` : '—'}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Building2 className="w-5 h-5 text-primary mt-1" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Department</p>
+                    <p className="text-foreground font-medium">{profile?.profile?.department || '—'}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <DollarSign className="w-5 h-5 text-primary mt-1" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Consultation Fee</p>
+                    <p className="text-foreground font-medium">${profile?.profile?.fee || '—'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Patient-specific fields */}
+          {user?.role === 'patient' && (
+            <div>
+              <h2 className="text-lg font-semibold text-foreground mb-4">Health Information</h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="flex items-start gap-3">
+                  <Phone className="w-5 h-5 text-primary mt-1" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Phone</p>
+                    <p className="text-foreground font-medium">{profile?.profile?.phone || '—'}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Heart className="w-5 h-5 text-primary mt-1" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Blood Group</p>
+                    <p className="text-foreground font-medium">{profile?.profile?.bloodGroup || '—'}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-primary mt-1" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Allergies</p>
+                    <p className="text-foreground font-medium">{profile?.profile?.allergies?.join(', ') || '—'}</p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <Pill className="w-5 h-5 text-primary mt-1" />
+                  <div>
+                    <p className="text-xs text-muted-foreground">Medications</p>
+                    <p className="text-foreground font-medium">{profile?.profile?.medications?.join(', ') || '—'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
         </motion.div>
 
+        {/* Edit Dialog */}
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Edit Profile</DialogTitle>
-              <DialogDescription>Update your contact and health details.</DialogDescription>
+              <DialogDescription>
+                {user?.role === 'doctor' 
+                  ? 'Update your professional information' 
+                  : 'Update your personal and health information'}
+              </DialogDescription>
             </DialogHeader>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-6">
+              {/* Basic Section */}
               <div>
-                <label className="text-sm font-medium text-foreground">Name</label>
-                <Input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} className="mt-1.5" />
+                <h3 className="font-semibold text-foreground mb-4">Basic Information</h3>
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-sm font-medium text-foreground">Full Name</label>
+                    <Input
+                      value={getForm('name')}
+                      onChange={(e) => setFormValue('name', e.target.value)}
+                      placeholder="John Doe"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-foreground">Email</label>
+                    <Input
+                      value={getForm('email')}
+                      onChange={(e) => setFormValue('email', e.target.value)}
+                      type="email"
+                      placeholder="john@example.com"
+                      className="mt-1"
+                      disabled
+                    />
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="text-sm font-medium text-foreground">Email</label>
-                <Input value={form.email} onChange={(event) => setForm((current) => ({ ...current, email: event.target.value }))} className="mt-1.5" />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-foreground">Phone</label>
-                <Input value={form.phone} onChange={(event) => setForm((current) => ({ ...current, phone: event.target.value }))} className="mt-1.5" />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-foreground">Emergency Contact</label>
-                <Input value={form.emergencyContact} onChange={(event) => setForm((current) => ({ ...current, emergencyContact: event.target.value }))} className="mt-1.5" />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-foreground">Blood Group</label>
-                <Input value={form.bloodGroup} onChange={(event) => setForm((current) => ({ ...current, bloodGroup: event.target.value }))} className="mt-1.5" />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-foreground">Allergies</label>
-                <Textarea value={form.allergies} onChange={(event) => setForm((current) => ({ ...current, allergies: event.target.value }))} className="mt-1.5 min-h-24" />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-foreground">Medications</label>
-                <Textarea value={form.medications} onChange={(event) => setForm((current) => ({ ...current, medications: event.target.value }))} className="mt-1.5 min-h-24" />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-foreground">Known Conditions</label>
-                <Textarea value={form.diseases} onChange={(event) => setForm((current) => ({ ...current, diseases: event.target.value }))} className="mt-1.5 min-h-24" />
-              </div>
-            </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-              <Button onClick={handleSave} disabled={updateMutation.isPending} className="gradient-primary text-primary-foreground border-0">
-                {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
-              </Button>
+              {/* Doctor Fields */}
+              {user?.role === 'doctor' && (
+                <div>
+                  <h3 className="font-semibold text-foreground mb-4">Professional Information</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-sm font-medium text-foreground">Specialization *</label>
+                      <select
+                        value={getForm('specialization')}
+                        onChange={(e) => setFormValue('specialization', e.target.value)}
+                        className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                      >
+                        <option value="">Select Specialization</option>
+                        {specializations.map((spec) => (
+                          <option key={spec} value={spec}>{spec}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-foreground">Years of Experience *</label>
+                      <Input
+                        value={getForm('experience')}
+                        onChange={(e) => setFormValue('experience', e.target.value)}
+                        type="number"
+                        min="0"
+                        placeholder="5"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-foreground">Department *</label>
+                      <select
+                        value={getForm('department')}
+                        onChange={(e) => setFormValue('department', e.target.value)}
+                        className="w-full mt-1 px-3 py-2 rounded-lg border border-border bg-background text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+                      >
+                        <option value="">Select Department</option>
+                        {departments.map((dept) => (
+                          <option key={dept} value={dept}>{dept}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-foreground">Consultation Fee</label>
+                      <Input
+                        value={getForm('fee')}
+                        onChange={(e) => setFormValue('fee', e.target.value)}
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="50"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        checked={getForm('available')}
+                        onChange={(e) => setFormValue('available', e.target.checked)}
+                        className="w-4 h-4 rounded border-border cursor-pointer"
+                      />
+                      <label className="text-sm font-medium text-foreground cursor-pointer">
+                        Available for appointments
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Patient Fields */}
+              {user?.role === 'patient' && (
+                <div>
+                  <h3 className="font-semibold text-foreground mb-4">Health Information</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-sm font-medium text-foreground">Phone</label>
+                      <Input
+                        value={getForm('phone')}
+                        onChange={(e) => setFormValue('phone', e.target.value)}
+                        type="tel"
+                        placeholder="+1 234 567 8900"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-foreground">Blood Group</label>
+                      <Input
+                        value={getForm('bloodGroup')}
+                        onChange={(e) => setFormValue('bloodGroup', e.target.value)}
+                        placeholder="O+"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-foreground">Allergies (comma-separated)</label>
+                      <Textarea
+                        value={getForm('allergies')}
+                        onChange={(e) => setFormValue('allergies', e.target.value)}
+                        placeholder="e.g., Penicillin, Peanuts"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-foreground">Medications (comma-separated)</label>
+                      <Textarea
+                        value={getForm('medications')}
+                        onChange={(e) => setFormValue('medications', e.target.value)}
+                        placeholder="e.g., Aspirin 100mg, Vitamin D 1000IU"
+                        className="mt-1"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium text-foreground">Emergency Contact</label>
+                      <Input
+                        value={getForm('emergencyContact')}
+                        onChange={(e) => setFormValue('emergencyContact', e.target.value)}
+                        placeholder="+1 234 567 8900"
+                        className="mt-1"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 justify-end pt-4">
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={user?.role === 'doctor' ? handleSaveDoctorProfile : handleSavePatientProfile}
+                  disabled={updateMutation.isPending}
+                  className="gradient-primary text-primary-foreground border-0"
+                >
+                  {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>

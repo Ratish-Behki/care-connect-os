@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { motion } from 'framer-motion';
-import { Heart, Mail, Lock, ArrowRight } from 'lucide-react';
+import { Heart, Mail, Lock, ArrowRight, X } from 'lucide-react';
 import { useMutation } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,7 @@ import { useAuthStore } from '@/store/authStore';
 import { UserRole } from '@/types';
 import { authService } from '@/services/authService';
 import { useToast } from '@/hooks/use-toast';
+import { useEmailSuggestions } from '@/hooks/useEmailSuggestions';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email'),
@@ -31,11 +32,13 @@ const roles: { value: UserRole; label: string; emoji: string }[] = [
 
 const LoginPage = () => {
   const [selectedRole, setSelectedRole] = useState<UserRole>('patient');
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const navigate = useNavigate();
   const setSession = useAuthStore((s) => s.setSession);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const hasHydrated = useAuthStore((s) => s.hasHydrated);
   const { toast } = useToast();
+  const { getSuggestions, removeSuggestion } = useEmailSuggestions();
 
   useEffect(() => {
     if (hasHydrated && isAuthenticated) {
@@ -43,15 +46,23 @@ const LoginPage = () => {
     }
   }, [hasHydrated, isAuthenticated, navigate]);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<LoginForm>({
+  const { register, handleSubmit, formState: { errors }, setValue, watch } = useForm<LoginForm>({
     resolver: zodResolver(loginSchema),
   });
 
+  const emailValue = watch('email');
+  const roleSuggestions = getSuggestions(selectedRole);
+
   const loginMutation = useMutation({
     mutationFn: (data: LoginForm) => authService.login({ ...data, role: selectedRole }),
-    onSuccess: ({ user, token }) => {
+    onSuccess: ({ user, token, profileComplete }) => {
       setSession(user, token);
-      navigate('/dashboard');
+      // Redirect doctors with incomplete profiles to setup page
+      if (selectedRole === 'doctor' && profileComplete === false) {
+        navigate('/doctor-profile-setup');
+      } else {
+        navigate('/dashboard');
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -64,6 +75,11 @@ const LoginPage = () => {
 
   const onSubmit = (data: LoginForm) => {
     loginMutation.mutate(data);
+  };
+
+  const handleSuggestionClick = (email: string) => {
+    setValue('email', email);
+    setShowSuggestions(false);
   };
 
   return (
@@ -90,7 +106,10 @@ const LoginPage = () => {
             {roles.map((r) => (
               <button
                 key={r.value}
-                onClick={() => setSelectedRole(r.value)}
+                onClick={() => {
+                  setSelectedRole(r.value);
+                  setShowSuggestions(false);
+                }}
                 className={`p-3 rounded-lg text-center text-xs font-medium transition-all ${
                   selectedRole === r.value
                     ? 'bg-primary text-primary-foreground shadow-elevated'
@@ -107,15 +126,61 @@ const LoginPage = () => {
             <div>
               <Label htmlFor="email" className="text-foreground">Email</Label>
               <div className="relative mt-1.5">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input {...register('email')} id="email" placeholder="you@email.com" className="pl-10" />
+                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
+                <Input
+                  {...register('email')}
+                  id="email"
+                  placeholder="you@email.com"
+                  className="pl-10"
+                  onFocus={() => setShowSuggestions(true)}
+                />
+                
+                {/* Email suggestions dropdown */}
+                {showSuggestions && roleSuggestions.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    className="absolute top-full left-0 right-0 mt-2 bg-background border border-border rounded-lg shadow-lg z-50 overflow-hidden"
+                  >
+                    <div className="max-h-48 overflow-y-auto">
+                      {roleSuggestions.map((suggestion) => (
+                        <div
+                          key={suggestion.email}
+                          className="flex items-center justify-between px-4 py-3 hover:bg-accent cursor-pointer transition-colors border-b border-border last:border-b-0"
+                        >
+                          <button
+                            type="button"
+                            onClick={() => handleSuggestionClick(suggestion.email)}
+                            className="flex-1 text-left"
+                          >
+                            <p className="text-sm text-foreground font-medium truncate">
+                              {suggestion.email}
+                            </p>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeSuggestion(suggestion.email);
+                            }}
+                            className="ml-2 p-1 hover:bg-destructive/10 rounded transition-colors"
+                            title="Remove this suggestion"
+                          >
+                            <X className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </motion.div>
+                )}
               </div>
               {errors.email && <p className="text-xs text-destructive mt-1">{errors.email.message}</p>}
             </div>
             <div>
               <Label htmlFor="password" className="text-foreground">Password</Label>
               <div className="relative mt-1.5">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground pointer-events-none" />
                 <Input {...register('password')} id="password" type="password" placeholder="••••••" className="pl-10" />
               </div>
               {errors.password && <p className="text-xs text-destructive mt-1">{errors.password.message}</p>}

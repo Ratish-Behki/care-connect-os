@@ -3,6 +3,7 @@ import RequireAuth from '@/routes/RequireAuth';
 import LandingPage from "@/pages/LandingPage";
 import LoginPage from "@/pages/LoginPage";
 import SignupPage from "@/pages/SignupPage";
+import DoctorProfileSetupPage from "@/pages/DoctorProfileSetupPage";
 import PatientDashboard from "@/pages/PatientDashboard";
 import DoctorsPage from "@/pages/DoctorsPage";
 import AppointmentsPage from "@/pages/AppointmentsPage";
@@ -20,6 +21,14 @@ export default function AppRoutes() {
       <Route path="/" element={<LandingPage />} />
       <Route path="/login" element={<LoginPage />} />
       <Route path="/signup" element={<SignupPage />} />
+      <Route
+        path="/doctor-profile-setup"
+        element={
+          <RequireAuth>
+            <DoctorProfileSetupPage />
+          </RequireAuth>
+        }
+      />
       <Route
         path="/dashboard"
         element={
